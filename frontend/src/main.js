@@ -260,15 +260,18 @@ function markCacheDirty(tab) {
 // ===== Dashboard =====
 window.refreshDashboard = refreshDashboard;
 async function refreshDashboard() {
+    const btn = document.querySelector('#tab-dashboard .page-header .btn-primary');
     // If cache is valid, render immediately from cache
     if (isCacheValid(tabCache.dashboard)) {
+        setButtonLoading(btn, true, '刷新');
         renderDashboard(tabCache.dashboard.data);
         // Still refresh in background
-        refreshDashboardInBackground();
+        refreshDashboardInBackground().then(() => setButtonLoading(btn, false, '刷新'));
         return;
     }
 
     try {
+        setButtonLoading(btn, true, '刷新');
         // Quick: ListInstalled + GetDiskUsage (local, fast)
         const [packages, diskUsage] = await Promise.all([
             Service.ListInstalled(),
@@ -280,9 +283,10 @@ async function refreshDashboard() {
         renderDashboard(quickData);
 
         // Slow: GetOutdated (may need network, do in background)
-        refreshDashboardInBackground();
+        refreshDashboardInBackground().catch(() => {}).finally(() => setButtonLoading(btn, false, '刷新'));
     } catch (err) {
         showToast('加载失败: ' + err.message, 'error');
+        setButtonLoading(btn, false, '刷新');
     }
 }
 
@@ -437,10 +441,10 @@ function filterInstalled(type) {
 
 window.reinstallPackage = reinstallPackage;
 async function reinstallPackage(name, type) {
-    showModal(
+    showModalLoading(
         '确认重装',
         `确定要重装 <strong>${escapeHtml(name)}</strong> 吗？这将重新下载并安装该包。`,
-        async () => {
+        async (confirmBtn) => {
             try {
                 await Service.Reinstall(name, type);
                 showToast(`${name} 重装成功`, 'success');
@@ -456,16 +460,18 @@ async function reinstallPackage(name, type) {
             } catch (err) {
                 showToast('重装失败: ' + err.message, 'error');
             }
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '确认';
         }
     );
 }
 
 window.uninstallPackage = uninstallPackage;
 async function uninstallPackage(name, type) {
-    showModal(
+    showModalLoading(
         '确认卸载',
         `确定要卸载 <strong>${escapeHtml(name)}</strong> 吗？`,
-        async () => {
+        async (confirmBtn) => {
             try {
                 await Service.Uninstall(name, type);
                 showToast(`${name} 已卸载`, 'success');
@@ -481,6 +487,8 @@ async function uninstallPackage(name, type) {
             } catch (err) {
                 showToast('卸载失败: ' + err.message, 'error');
             }
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -529,10 +537,10 @@ async function doSearch(query) {
 
 window.installPackage = installPackage;
 async function installPackage(name, type) {
-    showModal(
+    showModalLoading(
         '确认安装',
         `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？`,
-        async () => {
+        async (confirmBtn) => {
             try {
                 await Service.Install(name, type);
                 showToast(`${name} 安装成功`, 'success');
@@ -549,6 +557,8 @@ async function installPackage(name, type) {
             } catch (err) {
                 showToast('安装失败: ' + err.message, 'error');
             }
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -612,7 +622,18 @@ function renderOutdated(outdated) {
 }
 
 async function upgradePackage(name) {
+    // Find the button in the outdated table for this package
+    const rows = document.querySelectorAll('#outdated-tbody tr');
+    let targetBtn = null;
+    for (const row of rows) {
+        const nameCell = row.querySelector('.name-cell');
+        if (nameCell && nameCell.textContent === name) {
+            targetBtn = row.querySelector('.btn');
+            break;
+        }
+    }
     try {
+        setButtonLoading(targetBtn, true, '更新');
         await Service.Upgrade([name]);
         showToast(`${name} 更新成功`, 'success');
         markCacheDirty('outdated');
@@ -626,6 +647,7 @@ async function upgradePackage(name) {
     } catch (err) {
         showToast('更新失败: ' + err.message, 'error');
     }
+    setButtonLoading(targetBtn, false, '更新');
 }
 
 window.upgradeAll = upgradeAll;
@@ -678,11 +700,13 @@ async function exportConfig() {
 
 window.cleanupBrew = cleanupBrew;
 async function cleanupBrew() {
-    showModal(
+    const btn = document.querySelector('.dashboard-section .settings-actions .btn-secondary:nth-child(2)');
+    showModalLoading(
         '清理缓存',
         '确定要清理 Homebrew 缓存和旧版本吗？',
-        async () => {
+        async (confirmBtn) => {
             try {
+                setButtonLoading(btn, true, '清理缓存');
                 await Service.Cleanup();
                 showToast('清理完成', 'success');
                 markCacheDirty('dashboard');
@@ -692,6 +716,9 @@ async function cleanupBrew() {
             } catch (err) {
                 showToast('清理失败: ' + err.message, 'error');
             }
+            setButtonLoading(btn, false, '清理缓存');
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -705,7 +732,8 @@ async function loadDependencies() {
         document.getElementById('dependency-results').innerHTML = '<p class="empty-state">请输入包名</p>';
         return;
     }
-
+    const btn = input.nextElementSibling;
+    setButtonLoading(btn, true, '查询');
     const container = document.getElementById('dependency-results');
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 查询中...</div>';
 
@@ -729,6 +757,7 @@ async function loadDependencies() {
     } catch (err) {
         container.innerHTML = `<p class="empty-state">查询失败: ${err.message}</p>`;
     }
+    setButtonLoading(btn, false, '查询');
 }
 
 // Allow Enter key to trigger dependency search
@@ -749,15 +778,16 @@ async function loadDependencies() {
 
 window.autoremoveDeps = autoremoveDeps;
 async function autoremoveDeps() {
-    showModal(
+    const btn = document.querySelector('.dependency-section:last-child .btn-warning');
+    showModalLoading(
         '清理孤立依赖',
         '确定要清理不再被任何包依赖的孤立依赖吗？这将释放磁盘空间。',
-        async () => {
+        async (confirmBtn) => {
             const resultDiv = document.getElementById('autoremove-result');
             resultDiv.className = 'autoremove-result';
             resultDiv.style.display = 'block';
             resultDiv.textContent = '正在清理...';
-
+            setButtonLoading(btn, true, '执行清理');
             try {
                 await Service.Autoremove();
                 resultDiv.className = 'autoremove-result success';
@@ -772,6 +802,9 @@ async function autoremoveDeps() {
                 resultDiv.textContent = '✗ 清理失败: ' + err.message;
                 showToast('清理失败: ' + err.message, 'error');
             }
+            setButtonLoading(btn, false, '执行清理');
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -827,7 +860,8 @@ async function addTap() {
         showToast('请输入 tap 名称', 'error');
         return;
     }
-
+    const btn = input.nextElementSibling;
+    setButtonLoading(btn, true, '添加 Tap');
     try {
         await Service.AddTap(tap);
         showToast(`Tap ${tap} 添加成功`, 'success');
@@ -839,14 +873,15 @@ async function addTap() {
     } catch (err) {
         showToast('添加 Tap 失败: ' + err.message, 'error');
     }
+    setButtonLoading(btn, false, '添加 Tap');
 }
 
 window.removeTap = removeTap;
 async function removeTap(tap) {
-    showModal(
+    showModalLoading(
         '确认移除 Tap',
         `确定要移除 tap <strong>${escapeHtml(tap)}</strong> 吗？`,
-        async () => {
+        async (confirmBtn) => {
             try {
                 await Service.RemoveTap(tap);
                 showToast(`Tap ${tap} 已移除`, 'success');
@@ -857,6 +892,8 @@ async function removeTap(tap) {
             } catch (err) {
                 showToast('移除失败: ' + err.message, 'error');
             }
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -911,6 +948,40 @@ function escapeHtml(str) {
     div.textContent = str;
     return div.innerHTML;
 }
+
+// ===== Button Loading State =====
+function setButtonLoading(btn, loading, originalText) {
+    if (!btn) return;
+    if (loading) {
+        btn.disabled = true;
+        btn.dataset.originalText = originalText || btn.textContent.trim();
+        const origHTML = btn.innerHTML;
+        btn.dataset.originalHTML = origHTML;
+        btn.innerHTML = `<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> 处理中...`;
+    } else {
+        btn.disabled = false;
+        btn.innerHTML = btn.dataset.originalHTML || btn.dataset.originalText;
+    }
+}
+
+// ===== Modal with Loading Indicator =====
+function showModalLoading(title, bodyHTML, onConfirm) {
+    document.getElementById('modal-title').textContent = title;
+    const body = document.getElementById('modal-body');
+    body.innerHTML = bodyHTML + '<div class="loading-state" style="padding:16px 0;"><span class="spinner"></span> 执行中...</div>';
+    document.getElementById('modal-overlay').style.display = 'flex';
+    const confirmBtn = document.getElementById('modal-confirm');
+    const newBtn = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
+    newBtn.addEventListener('click', () => {
+        newBtn.disabled = true;
+        newBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> 执行中...';
+        onConfirm(newBtn);
+    });
+}
+
+window.setButtonLoading = setButtonLoading;
+window.showModalLoading = showModalLoading;
 
 // ===== Keyboard Shortcuts =====
 document.addEventListener('keydown', (e) => {
@@ -1043,6 +1114,7 @@ window.runVulns = async function() {
 // ===== Pin / Unpin =====
 window.pinPackage = pinPackage;
 async function pinPackage(name) {
+    showToast(`${name} 正在锁定...`, 'info');
     try {
         await Service.Pin(name);
         showToast(`${name} 已锁定`, 'success');
@@ -1053,6 +1125,7 @@ async function pinPackage(name) {
 
 window.unpinPackage = unpinPackage;
 async function unpinPackage(name) {
+    showToast(`${name} 正在解锁...`, 'info');
     try {
         await Service.Unpin(name);
         showToast(`${name} 已解锁`, 'success');
@@ -1064,6 +1137,7 @@ async function unpinPackage(name) {
 // ===== Link / Unlink =====
 window.linkPackage = linkPackage;
 async function linkPackage(name) {
+    showToast(`${name} 正在链接...`, 'info');
     try {
         await Service.Link(name);
         showToast(`${name} 已链接`, 'success');
@@ -1074,6 +1148,7 @@ async function linkPackage(name) {
 
 window.unlinkPackage = unlinkPackage;
 async function unlinkPackage(name) {
+    showToast(`${name} 正在取消链接...`, 'info');
     try {
         await Service.Unlink(name);
         showToast(`${name} 已取消链接`, 'success');
@@ -1085,6 +1160,8 @@ async function unlinkPackage(name) {
 // ===== Leaves =====
 window.loadLeaves = loadLeaves;
 async function loadLeaves() {
+    const btn = document.querySelector('.dependency-section:nth-child(3) .btn-secondary');
+    setButtonLoading(btn, true, '加载顶层包');
     const container = document.getElementById('leaves-list');
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 加载中...</div>';
     try {
@@ -1102,11 +1179,14 @@ async function loadLeaves() {
     } catch (err) {
         container.innerHTML = `<p class="empty-state">加载失败: ${err.message}</p>`;
     }
+    setButtonLoading(btn, false, '加载顶层包');
 }
 
 // ===== Missing =====
 window.loadMissing = loadMissing;
 async function loadMissing() {
+    const btn = document.querySelector('.dependency-section:nth-child(4) .btn-secondary');
+    setButtonLoading(btn, true, '检查缺失依赖');
     const container = document.getElementById('missing-list');
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 检查中...</div>';
     try {
@@ -1124,6 +1204,7 @@ async function loadMissing() {
     } catch (err) {
         container.innerHTML = `<p class="empty-state">检查失败: ${err.message}</p>`;
     }
+    setButtonLoading(btn, false, '检查缺失依赖');
 }
 
 // ===== Uses (reverse dependencies) =====
@@ -1135,7 +1216,8 @@ async function loadUses() {
         document.getElementById('uses-results').innerHTML = '<p class="empty-state">请输入包名</p>';
         return;
     }
-
+    const btn = input.nextElementSibling;
+    setButtonLoading(btn, true, '查询');
     const container = document.getElementById('uses-results');
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 查询中...</div>';
 
@@ -1154,6 +1236,7 @@ async function loadUses() {
     } catch (err) {
         container.innerHTML = `<p class="empty-state">查询失败: ${err.message}</p>`;
     }
+    setButtonLoading(btn, false, '查询');
 }
 
 // ===== Init =====
