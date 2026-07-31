@@ -49,6 +49,7 @@ body {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  user-select: none;
 }
 
 .sidebar-header {
@@ -74,21 +75,22 @@ body {
   padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 10px 14px;
   border: none;
   background: transparent;
   color: var(--text-secondary);
   font-size: 14px;
+  font-family: inherit;
   border-radius: var(--radius);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background-color 0.15s, color 0.15s;
   text-align: left;
   position: relative;
 }
@@ -125,19 +127,32 @@ body {
   color: var(--text-muted);
 }
 
-/* ===== Main Content ===== */
+/* ===== Main Content - SLIDE TRANSITION ===== */
 .main-content {
   flex: 1;
-  overflow-y: auto;
-  padding: 24px 32px;
+  overflow: hidden;
+  position: relative;
 }
 
 .tab-content {
-  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  padding: 24px 32px;
+  opacity: 0;
+  transform: translateX(30px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
 }
 
 .tab-content.active {
-  display: block;
+  position: relative;
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
 }
 
 /* ===== Page Header ===== */
@@ -160,56 +175,87 @@ body {
   align-items: center;
 }
 
-/* ===== Buttons ===== */
+/* ===== Buttons - UNIFIED STYLE ===== */
 .btn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
   padding: 8px 16px;
-  border: none;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   font-size: 13px;
   font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Primary - accent color with border */
 .btn-primary {
   background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* Secondary - same as primary but lighter */
+.btn-secondary {
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--bg-hover);
+}
+
+/* Danger - red with border */
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger);
   color: white;
 }
 
-.btn-primary:hover {
-  background: var(--accent-hover);
+/* Warning - amber with border */
+.btn-warning {
+  background: transparent;
+  border-color: var(--warning);
+  color: var(--warning);
+}
+.btn-warning:hover:not(:disabled) {
+  background: var(--warning);
+  color: white;
 }
 
-.btn-secondary {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+/* Success - green with border */
+.btn-success {
+  background: transparent;
+  border-color: var(--success);
+  color: var(--success);
 }
-
-.btn-secondary:hover {
-  background: var(--bg-hover);
-}
-
-.btn-danger {
-  background: var(--danger-dim);
-  color: var(--danger);
-}
-
-.btn-danger:hover {
-  background: var(--danger);
+.btn-success:hover:not(:disabled) {
+  background: var(--success);
   color: white;
 }
 
 .btn-sm {
   padding: 5px 10px;
   font-size: 12px;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* ===== Stats Grid (Dashboard) ===== */
@@ -409,9 +455,10 @@ body {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 10px 16px;
+  padding: 8px 14px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 13px;
+  font-family: inherit;
   outline: none;
   transition: border-color 0.15s;
 }
@@ -422,8 +469,8 @@ body {
 
 .search-input-lg {
   width: 100%;
-  padding: 14px 20px;
-  font-size: 16px;
+  padding: 12px 18px;
+  font-size: 15px;
 }
 
 .filter-select {
@@ -433,6 +480,7 @@ body {
   padding: 8px 12px;
   color: var(--text-primary);
   font-size: 13px;
+  font-family: inherit;
   outline: none;
   cursor: pointer;
 }
@@ -515,7 +563,7 @@ body {
 .info-item {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: 10px 0;
   border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
@@ -526,6 +574,9 @@ body {
 .info-item .value { color: var(--text-primary); font-weight: 500; }
 
 .tap-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 8px 12px;
   background: var(--bg-primary);
   border-radius: 6px;
@@ -533,9 +584,168 @@ body {
   color: var(--text-secondary);
 }
 
+.tap-item .tap-name {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 .settings-actions {
   display: flex;
   gap: 12px;
+}
+
+/* ===== Tap Management ===== */
+.tap-add-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tap-add-row .search-input {
+  flex: 1;
+}
+
+/* ===== Dependency Tab ===== */
+.dependency-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.dependency-section h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.dependency-search {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.dependency-search .search-input {
+  flex: 1;
+}
+
+.dependency-hint {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.dependency-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dependency-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.dependency-item .dep-name {
+  font-weight: 500;
+  color: var(--accent-hover);
+}
+
+.dependency-item .dep-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.dependency-item .dep-status.installed {
+  color: var(--success);
+}
+
+.autoremove-result {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  display: none;
+}
+
+.autoremove-result.success {
+  display: block;
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.autoremove-result.error {
+  display: block;
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
+/* ===== Package Detail Modal ===== */
+.modal-lg {
+  width: 600px;
+  max-width: 95vw;
+}
+
+.detail-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.detail-info-item {
+  padding: 10px 14px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+}
+
+.detail-info-item .label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.detail-info-item .value {
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.detail-deps-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.dep-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--accent-dim);
+  color: var(--accent-hover);
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dep-tag.optional {
+  background: var(--warning-dim);
+  color: var(--warning);
+}
+
+.dep-tag.dev {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
 }
 
 /* ===== Toast ===== */
@@ -550,28 +760,30 @@ body {
 }
 
 .toast {
-  padding: 12px 20px;
+  padding: 10px 18px;
   border-radius: var(--radius);
   font-size: 13px;
   font-weight: 500;
+  font-family: inherit;
   animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
   animation-fill-mode: forwards;
   max-width: 360px;
+  border: 1px solid var(--border);
 }
 
 .toast-success {
-  background: var(--success);
-  color: white;
+  background: var(--success-dim);
+  color: var(--success);
 }
 
 .toast-error {
-  background: var(--danger);
-  color: white;
+  background: var(--danger-dim);
+  color: var(--danger);
 }
 
 .toast-info {
-  background: var(--accent);
-  color: white;
+  background: var(--accent-dim);
+  color: var(--accent-hover);
 }
 
 @keyframes slideIn {

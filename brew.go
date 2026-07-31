@@ -16,6 +16,9 @@ type BrewPackage struct {
 	Description string `json:"description"`
 	Type        string `json:"type"` // "cask" or "formula"
 	Outdated    bool   `json:"outdated"`
+	Installed   bool   `json:"installed"`
+	DependsOn   []string `json:"depends_on,omitempty"`
+	InstallTime string   `json:"install_time,omitempty"`
 }
 
 // BrewSearchResult represents a search result from brew search
@@ -25,6 +28,7 @@ type BrewSearchResult struct {
 	Description string `json:"description"`
 	Type        string `json:"type"`
 	Installed   bool   `json:"installed"`
+	Score       float64 `json:"score,omitempty"`
 }
 
 // Service handles all brew operations
@@ -393,4 +397,138 @@ func (s *Service) ExportConfig() (string, error) {
 		strings.TrimSpace(formulaOutput))
 
 	return content, nil
+}
+
+// GetDependencies returns the dependencies for a package
+func (s *Service) GetDependencies(name string) ([]string, error) {
+	jsonOutput, err := s.runBrew("info", "--json=v2", name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get dependencies for %s: %w", name, err)
+	}
+
+	var info []struct {
+		Name      string `json:"name"`
+		DependsOn []struct {
+			Name string `json:"name"`
+		} `json:"depends_on"`
+	}
+	if err := json.Unmarshal([]byte(jsonOutput), &info); err != nil {
+		// Try v1 format
+		return s.getDependenciesV1(name)
+	}
+
+	if len(info) == 0 {
+		return []string{}, nil
+	}
+
+	deps := make([]string, 0)
+	for _, dep := range info[0].DependsOn {
+		if dep.Name != "" {
+			deps = append(deps, dep.Name)
+		}
+	}
+	return deps, nil
+}
+
+// getDependenciesV1 uses the v1 JSON format as fallback
+func (s *Service) getDependenciesV1(name string) ([]string, error) {
+	jsonOutput, err := s.runBrew("info", "--json", name)
+	if err != nil {
+		return nil, err
+	}
+
+	var info []struct {
+		Name      string `json:"name"`
+		DependsOn []string `json:"depends_on"`
+	}
+	if err := json.Unmarshal([]byte(jsonOutput), &info); err != nil {
+		return nil, err
+	}
+
+	if len(info) == 0 {
+		return []string{}, nil
+	}
+	return info[0].DependsOn, nil
+}
+
+// Autoremove removes orphaned dependencies
+func (s *Service) Autoremove() error {
+	_, err := s.runBrew("autoremove")
+	if err != nil {
+		return fmt.Errorf("failed to autoremove: %w", err)
+	}
+	return nil
+}
+
+// AddTap adds a new tap
+func (s *Service) AddTap(tap string) error {
+	_, err := s.runBrew("tap", tap)
+	if err != nil {
+		return fmt.Errorf("failed to add tap %s: %w", tap, err)
+	}
+	return nil
+}
+
+// RemoveTap removes a tap
+func (s *Service) RemoveTap(tap string) error {
+	_, err := s.runBrew("untap", tap)
+	if err != nil {
+		return fmt.Errorf("failed to remove tap %s: %w", tap, err)
+	}
+	return nil
+}
+
+// GetPackageInstallTime returns the installation time of a package
+func (s *Service) GetPackageInstallTime(name string) (string, error) {
+	// Try to get from brew info
+	jsonOutput, err := s.runBrew("info", "--json=v2", name)
+	if err != nil {
+		return "", err
+	}
+
+	var info []struct {
+		Name          string `json:"name"`
+		InstalledOnce []string `json:"installed_once_ever"`
+	}
+	if err := json.Unmarshal([]byte(jsonOutput), &info); err != nil {
+		return "", err
+	}
+
+	if len(info) > 0 {
+		return info[0].Name, nil
+	}
+	return "", nil
+}
+
+// GetOutdatedWithVersion returns outdated packages with current and latest versions
+func (s *Service) GetOutdatedWithVersion() ([]BrewPackage, error) {
+	output, err := s.runBrew("outdated")
+	if err != nil {
+		return []BrewPackage{}, nil
+	}
+
+	packages := make([]BrewPackage, 0)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		parts := strings.Fields(line)
+		if len(parts) >= 3 {
+			pkg := BrewPackage{
+				Name:        parts[0],
+				Version:     parts[1], // current version
+				Outdated:    true,
+				Type:        "formula",
+			}
+			// Check if it's a cask
+			if _, err := s.runBrew("list", "--cask", parts[0]); err == nil {
+				pkg.Type = "cask"
+			}
+			packages = append(packages, pkg)
+		}
+	}
+
+	return packages, nil
 }

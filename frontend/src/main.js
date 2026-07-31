@@ -1,20 +1,39 @@
-import * as ServiceAPI from '../wailsjs/go/main/Service';
-import * as AppAPI from '../wailsjs/go/main/App';
+// ===== Tab Navigation with Slide Transition =====
+let currentTab = 'dashboard';
 
-// ===== Tab Navigation =====
+function switchTab(tab) {
+    if (tab === currentTab) return;
+
+    // Animate out old tab
+    const oldTab = document.getElementById(`tab-${currentTab}`);
+    if (oldTab) {
+        oldTab.classList.remove('active');
+    }
+
+    // Animate in new tab
+    const newTab = document.getElementById(`tab-${tab}`);
+    if (newTab) {
+        newTab.classList.add('active');
+    }
+
+    // Update nav buttons
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    const navBtn = document.querySelector(`[data-tab="${tab}"]`);
+    if (navBtn) navBtn.classList.add('active');
+
+    currentTab = tab;
+
+    // Load data for the tab
+    if (tab === 'dashboard') refreshDashboard();
+    else if (tab === 'installed') loadInstalled();
+    else if (tab === 'outdated') loadOutdated();
+    else if (tab === 'settings') loadSettings();
+    else if (tab === 'dependencies') loadDependencies();
+}
+
 document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        const tab = btn.dataset.tab;
-        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-        document.getElementById(`tab-${tab}`).classList.add('active');
-
-        // Load data for the tab
-        if (tab === 'dashboard') refreshDashboard();
-        else if (tab === 'installed') loadInstalled();
-        else if (tab === 'outdated') loadOutdated();
-        else if (tab === 'settings') loadSettings();
+        switchTab(btn.dataset.tab);
     });
 });
 
@@ -25,7 +44,10 @@ function showToast(message, type = 'info') {
     toast.className = `toast toast-${type}`;
     toast.textContent = message;
     container.appendChild(toast);
-    setTimeout(() => toast.remove(), 3000);
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // ===== Modal =====
@@ -46,16 +68,102 @@ function closeModal() {
     document.getElementById('modal-overlay').style.display = 'none';
 }
 
+// ===== Package Detail Modal =====
+let currentDetailPackage = null;
+
+function showDetailModal(pkg) {
+    currentDetailPackage = pkg;
+    document.getElementById('detail-modal-title').textContent = pkg.name;
+    const body = document.getElementById('detail-modal-body');
+    const actionBtn = document.getElementById('detail-modal-action');
+    actionBtn.style.display = 'none';
+
+    body.innerHTML = '<div class="spinner" style="margin:20px auto;"></div>';
+    document.getElementById('detail-modal-overlay').style.display = 'flex';
+
+    // Load full package info
+    window.go.main.Service.GetPackageInfo(pkg.name, pkg.type).then(info => {
+        renderDetailModal(info);
+    }).catch(err => {
+        body.innerHTML = `<p class="empty-state">加载详情失败: ${err.message}</p>`;
+    });
+}
+
+function renderDetailModal(info) {
+    const body = document.getElementById('detail-modal-body');
+    const actionBtn = document.getElementById('detail-modal-action');
+
+    let html = `
+        <div class="detail-info-grid">
+            <div class="detail-info-item">
+                <div class="label">名称</div>
+                <div class="value">${escapeHtml(info.name)}</div>
+            </div>
+            <div class="detail-info-item">
+                <div class="label">版本</div>
+                <div class="value">${escapeHtml(info.version || '-')}</div>
+            </div>
+            <div class="detail-info-item">
+                <div class="label">类型</div>
+                <div class="value"><span class="type-badge ${info.type}">${info.type === 'cask' ? '应用' : '公式'}</span></div>
+            </div>
+            <div class="detail-info-item">
+                <div class="label">描述</div>
+                <div class="value" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(info.description || '暂无描述')}</div>
+            </div>
+        </div>
+    `;
+
+    // Load dependencies
+    window.go.main.Service.GetDependencies(info.name).then(deps => {
+        if (deps && deps.length > 0) {
+            html += `<div style="margin-top:16px;"><strong>依赖 (${deps.length}):</strong>`;
+            html += `<div class="detail-deps-list">`;
+            deps.forEach(dep => {
+                html += `<span class="dep-tag">${escapeHtml(dep)}</span>`;
+            });
+            html += `</div></div>`;
+        } else {
+            html += `<div style="margin-top:16px;color:var(--text-secondary);font-size:13px;">暂无依赖信息</div>`;
+        }
+
+        // Set action button based on installed status
+        if (info.installed) {
+            actionBtn.textContent = '卸载';
+            actionBtn.className = 'btn btn-danger';
+            actionBtn.style.display = 'inline-flex';
+            actionBtn.onclick = () => {
+                closeDetailModal();
+                uninstallPackage(info.name, info.type);
+            };
+        } else {
+            actionBtn.textContent = '安装';
+            actionBtn.className = 'btn btn-primary';
+            actionBtn.style.display = 'inline-flex';
+            actionBtn.onclick = () => {
+                closeDetailModal();
+                installPackage(info.name, info.type);
+            };
+        }
+
+        body.innerHTML = html;
+    }).catch(() => {
+        // Dependencies failed, still show basic info
+        body.innerHTML = html + `<div style="margin-top:16px;color:var(--text-muted);font-size:12px;">依赖信息加载失败</div>`;
+    });
+}
+
+function closeDetailModal() {
+    document.getElementById('detail-modal-overlay').style.display = 'none';
+    currentDetailPackage = null;
+}
+
 // ===== Dashboard =====
 async function refreshDashboard() {
     try {
-        console.log('[Dashboard] Starting...');
-        const packages = await ServiceAPI.ListInstalled();
-        console.log('[Dashboard] packages:', packages);
-        const outdated = await ServiceAPI.GetOutdated();
-        console.log('[Dashboard] outdated:', outdated);
-        const diskUsage = await ServiceAPI.GetDiskUsage();
-        console.log('[Dashboard] diskUsage:', diskUsage);
+        const packages = await window.go.main.Service.ListInstalled();
+        const outdated = await window.go.main.Service.GetOutdated();
+        const diskUsage = await window.go.main.Service.GetDiskUsage();
 
         const casks = packages.filter(p => p.type === 'cask');
         const formulas = packages.filter(p => p.type === 'formula');
@@ -79,12 +187,11 @@ async function refreshDashboard() {
         for (const [label, value] of Object.entries(diskUsage)) {
             diskGrid.innerHTML += `
                 <div class="disk-usage-item">
-                    <span class="label">${label}</span>
-                    <span class="value">${value}</span>
+                    <span class="label">${escapeHtml(label)}</span>
+                    <span class="value">${escapeHtml(value)}</span>
                 </div>`;
         }
 
-        // Recent actions (from localStorage)
         loadRecentActions();
 
     } catch (err) {
@@ -101,18 +208,16 @@ async function loadInstalled() {
         return;
     }
     try {
-        console.log('[Installed] Loading...');
-        const packages = await ServiceAPI.ListInstalled();
-        console.log('[Installed] loaded:', packages.length, 'packages');
+        const packages = await window.go.main.Service.ListInstalled();
 
-        // Batch fetch descriptions for all packages (up to 20 at a time to avoid too many concurrent calls)
+        // Batch fetch descriptions
         const BATCH_SIZE = 20;
         for (let i = 0; i < packages.length; i += BATCH_SIZE) {
             const batch = packages.slice(i, i + BATCH_SIZE);
             const promises = batch.map(async (pkg) => {
                 if (!pkg.description) {
                     try {
-                        const info = await ServiceAPI.GetPackageInfo(pkg.name, pkg.type);
+                        const info = await window.go.main.Service.GetPackageInfo(pkg.name, pkg.type);
                         Object.assign(pkg, info);
                     } catch {
                         // Keep empty description if fetch fails
@@ -143,6 +248,7 @@ function renderInstalled(packages) {
             <td><span class="type-badge ${p.type}">${p.type === 'cask' ? '应用' : '公式'}</span></td>
             <td style="color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.description || '-')}</td>
             <td>
+                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(allInstalledPackages.find(x => x.name === '${escapeHtml(p.name)}' && x))">详情</button>
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${p.type}')">卸载</button>
             </td>
         </tr>
@@ -167,8 +273,7 @@ async function uninstallPackage(name, type) {
         `确定要卸载 <strong>${escapeHtml(name)}</strong> 吗？`,
         async () => {
             try {
-                console.log('[Uninstall] Uninstalling', name, type);
-                await ServiceAPI.Uninstall(name, type);
+                await window.go.main.Service.Uninstall(name, type);
                 showToast(`${name} 已卸载`, 'success');
                 allInstalledPackages = allInstalledPackages.filter(p => p.name !== name);
                 filterInstalled();
@@ -199,7 +304,7 @@ async function doSearch(query) {
     container.innerHTML = '<p class="empty-state"><span class="spinner"></span> 搜索中...</p>';
 
     try {
-        const results = await ServiceAPI.Search(query);
+        const results = await window.go.main.Service.Search(query);
         if (!results || results.length === 0) {
             container.innerHTML = '<p class="empty-state">未找到匹配的结果</p>';
             return;
@@ -228,11 +333,10 @@ async function installPackage(name, type) {
         `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？`,
         async () => {
             try {
-                console.log('[Install] Installing', name, type);
-                await ServiceAPI.Install(name, type);
+                await window.go.main.Service.Install(name, type);
                 showToast(`${name} 安装成功`, 'success');
                 addRecentAction('install', name);
-                doSearch(document.getElementById('search-input').value); // refresh search
+                doSearch(document.getElementById('search-input').value);
             } catch (err) {
                 showToast('安装失败: ' + err.message, 'error');
             }
@@ -243,9 +347,7 @@ async function installPackage(name, type) {
 // ===== Outdated =====
 async function loadOutdated() {
     try {
-        console.log('[Outdated] Loading...');
-        const outdated = await ServiceAPI.GetOutdated();
-        console.log('[Outdated] result:', outdated);
+        const outdated = await window.go.main.Service.GetOutdated();
         const tbody = document.getElementById('outdated-tbody');
 
         if (outdated.length === 0) {
@@ -271,8 +373,7 @@ async function loadOutdated() {
 
 async function upgradePackage(name) {
     try {
-        console.log('[Upgrade] Upgrading', name);
-        await ServiceAPI.Upgrade([name]);
+        await window.go.main.Service.Upgrade([name]);
         showToast(`${name} 更新成功`, 'success');
         addRecentAction('upgrade', name);
         loadOutdated();
@@ -290,8 +391,7 @@ async function upgradeAll() {
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span> 更新中...';
             try {
-                console.log('[UpgradeAll] Upgrading all...');
-                await ServiceAPI.Upgrade([]);
+                await window.go.main.Service.Upgrade([]);
                 showToast('全部更新完成', 'success');
                 addRecentAction('upgrade', 'all packages');
                 loadOutdated();
@@ -309,12 +409,10 @@ async function upgradeAll() {
 // ===== Settings =====
 async function loadSettings() {
     try {
-        console.log('[Settings] Loading...');
-        const version = await AppAPI.Version();
-        console.log('[Settings] version:', version);
-        const taps = await ServiceAPI.GetTaps();
-        const diskUsage = await ServiceAPI.GetDiskUsage();
-        const stats = await ServiceAPI.GetStats();
+        const version = await window.go.main.App.Version();
+        const taps = await window.go.main.Service.GetTaps();
+        const diskUsage = await window.go.main.Service.GetDiskUsage();
+        const stats = await window.go.main.Service.GetStats();
 
         // Brew info
         document.getElementById('brew-info-list').innerHTML = `
@@ -328,8 +426,14 @@ async function loadSettings() {
 
         // Taps
         document.getElementById('taps-list').innerHTML = taps.length > 0
-            ? taps.map(t => `<div class="tap-item">${escapeHtml(t)}</div>`).join('')
-            : '<p class="empty-state">暂无 taps</p>';
+            ? taps.map(t => {
+                const tapName = t.split(' ')[0];
+                return `<div class="tap-item">
+                    <span class="tap-name">${escapeHtml(tapName)}</span>
+                    <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')" style="padding:2px 8px;font-size:11px;">移除</button>
+                </div>`;
+            }).join('')
+            : '<p class="empty-state" style="padding:12px;">暂无 taps</p>';
 
         // Disk usage detailed
         document.getElementById('disk-usage-detailed').innerHTML = Object.entries(diskUsage).map(([label, value]) => `
@@ -346,8 +450,7 @@ async function loadSettings() {
 
 async function exportConfig() {
     try {
-        console.log('[Export] Exporting config...');
-        const content = await ServiceAPI.ExportConfig();
+        const content = await window.go.main.Service.ExportConfig();
         const blob = new Blob([content], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -367,12 +470,115 @@ async function cleanupBrew() {
         '确定要清理 Homebrew 缓存和旧版本吗？',
         async () => {
             try {
-                console.log('[Cleanup] Cleaning...');
-                await ServiceAPI.Cleanup();
+                await window.go.main.Service.Cleanup();
                 showToast('清理完成', 'success');
                 refreshDashboard();
             } catch (err) {
                 showToast('清理失败: ' + err.message, 'error');
+            }
+        }
+    );
+}
+
+// ===== Dependency Management =====
+async function loadDependencies() {
+    const input = document.getElementById('dep-search-input');
+    const name = input.value.trim();
+    if (!name) {
+        document.getElementById('dependency-results').innerHTML = '<p class="empty-state">请输入包名</p>';
+        return;
+    }
+
+    const container = document.getElementById('dependency-results');
+    container.innerHTML = '<p class="empty-state"><span class="spinner"></span> 查询中...</p>';
+
+    try {
+        const deps = await window.go.main.Service.GetDependencies(name);
+        if (!deps || deps.length === 0) {
+            container.innerHTML = '<p class="empty-state">未找到依赖信息（该包可能没有依赖或不存在）</p>';
+            return;
+        }
+
+        const installedSet = new Set(allInstalledPackages.map(p => p.name));
+
+        container.innerHTML = deps.map(dep => {
+            const isInstalled = installedSet.has(dep);
+            return `
+                <div class="dependency-item">
+                    <span class="dep-name">${escapeHtml(dep)}</span>
+                    <span class="dep-status ${isInstalled ? 'installed' : ''}">${isInstalled ? '✓ 已安装' : '未安装'}</span>
+                </div>`;
+        }).join('');
+    } catch (err) {
+        container.innerHTML = `<p class="empty-state">查询失败: ${err.message}</p>`;
+    }
+}
+
+// Allow Enter key to trigger dependency search
+document.addEventListener('DOMContentLoaded', () => {
+    const depInput = document.getElementById('dep-search-input');
+    if (depInput) {
+        depInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadDependencies();
+        });
+    }
+});
+
+async function autoremoveDeps() {
+    showModal(
+        '清理孤立依赖',
+        '确定要清理不再被任何包依赖的孤立依赖吗？这将释放磁盘空间。',
+        async () => {
+            const resultDiv = document.getElementById('autoremove-result');
+            resultDiv.className = 'autoremove-result';
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = '正在清理...';
+
+            try {
+                await window.go.main.Service.Autoremove();
+                resultDiv.className = 'autoremove-result success';
+                resultDiv.textContent = '✓ 孤立依赖清理完成！';
+                showToast('清理完成', 'success');
+                refreshDashboard();
+            } catch (err) {
+                resultDiv.className = 'autoremove-result error';
+                resultDiv.textContent = '✗ 清理失败: ' + err.message;
+                showToast('清理失败: ' + err.message, 'error');
+            }
+        }
+    );
+}
+
+// ===== Tap Management =====
+async function addTap() {
+    const input = document.getElementById('tap-input');
+    const tap = input.value.trim();
+    if (!tap) {
+        showToast('请输入 tap 名称', 'error');
+        return;
+    }
+
+    try {
+        await window.go.main.Service.AddTap(tap);
+        showToast(`Tap ${tap} 添加成功`, 'success');
+        input.value = '';
+        loadSettings();
+    } catch (err) {
+        showToast('添加 Tap 失败: ' + err.message, 'error');
+    }
+}
+
+async function removeTap(tap) {
+    showModal(
+        '确认移除 Tap',
+        `确定要移除 tap <strong>${escapeHtml(tap)}</strong> 吗？`,
+        async () => {
+            try {
+                await window.go.main.Service.RemoveTap(tap);
+                showToast(`Tap ${tap} 已移除`, 'success');
+                loadSettings();
+            } catch (err) {
+                showToast('移除失败: ' + err.message, 'error');
             }
         }
     );
@@ -392,7 +598,6 @@ function addRecentAction(type, name) {
         name,
         time: new Date().toISOString()
     });
-    // Keep only last 20
     if (actions.length > 20) actions.pop();
     localStorage.setItem('brew-actions', JSON.stringify(actions));
     loadRecentActions();
@@ -430,10 +635,31 @@ function escapeHtml(str) {
     return div.innerHTML;
 }
 
+// ===== Keyboard Shortcuts =====
+document.addEventListener('keydown', (e) => {
+    // Cmd/Ctrl + S = Search
+    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        e.preventDefault();
+        switchTab('search');
+        setTimeout(() => document.getElementById('search-input').focus(), 100);
+    }
+    // Cmd/Ctrl + R = Refresh Dashboard
+    if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
+        e.preventDefault();
+        switchTab('dashboard');
+        refreshDashboard();
+    }
+    // Escape = Close modals
+    if (e.key === 'Escape') {
+        closeModal();
+        closeDetailModal();
+    }
+});
+
 // ===== Init =====
 (async () => {
     try {
-        const version = await AppAPI.Version();
+        const version = await window.go.main.App.Version();
         document.getElementById('brew-version').textContent = version;
     } catch (err) {
         document.getElementById('brew-version').textContent = 'Brew 未安装';

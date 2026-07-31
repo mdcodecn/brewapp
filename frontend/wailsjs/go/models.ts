@@ -6,6 +6,9 @@ export namespace main {
 	    description: string;
 	    type: string;
 	    outdated: boolean;
+	    installed: boolean;
+	    depends_on?: string[];
+	    install_time?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new BrewPackage(source);
@@ -18,6 +21,9 @@ export namespace main {
 	        this.description = source["description"];
 	        this.type = source["type"];
 	        this.outdated = source["outdated"];
+	        this.installed = source["installed"];
+	        this.depends_on = source["depends_on"];
+	        this.install_time = source["install_time"];
 	    }
 	}
 	export class BrewSearchResult {
@@ -26,6 +32,7 @@ export namespace main {
 	    description: string;
 	    type: string;
 	    installed: boolean;
+	    score?: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new BrewSearchResult(source);
@@ -38,6 +45,7 @@ export namespace main {
 	        this.description = source["description"];
 	        this.type = source["type"];
 	        this.installed = source["installed"];
+	        this.score = source["score"];
 	    }
 	}
 
