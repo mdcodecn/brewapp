@@ -408,7 +408,7 @@ async function reinstallPackage(name, type) {
                     tabCache.installed.data = null;
                     tabCache.installed.timestamp = 0;
                     installedPackages = [];
-                    loadInstalled();
+                    loadInstalled(currentTab);
                 }, 500);
             } catch (err) {
                 showToast('重装失败: ' + err.message, 'error');
@@ -432,7 +432,7 @@ async function uninstallPackage(name, type) {
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
                 installedPackages = [];
-                loadInstalled();
+                loadInstalled(currentTab);
                 addRecentAction('uninstall', name);
             } catch (err) {
                 showToast('卸载失败: ' + err.message, 'error');
@@ -660,10 +660,10 @@ function renderSettings(data) {
     // Brew info
     document.getElementById('brew-info-list').innerHTML = `
         <div class="info-item"><span class="label">版本</span><span class="value">${escapeHtml(version)}</span></div>
-        ${stats && stats.stats ? stats.stats.split('\n').filter(l => l.trim()).map(l => {
-            const parts = l.split(':');
-            if (parts.length === 2) return `<div class="info-item"><span class="label">${escapeHtml(parts[0].trim())}</span><span class="value">${escapeHtml(parts[1].trim())}</span></div>`;
-            return '';
+        ${stats ? Object.entries(stats).map(([key, value]) => {
+            const labels = { installed_formulas: '已安装公式', installed_casks: '已安装应用', outdated: '可更新数量' };
+            const label = labels[key] || key;
+            return `<div class="info-item"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(value)}</span></div>`;
         }).join('') : ''}
     `;
 

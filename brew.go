@@ -87,10 +87,13 @@ func (s *Service) ListInstalled() ([]BrewPackage, error) {
 
 	for _, line := range strings.Split(strings.TrimSpace(formulaOutput), "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" || caskNames[line] {
+		if line == "" {
 			continue
 		}
 		pkg := s.parseVersionsLine(line, "formula")
+		if caskNames[pkg.Name] {
+			continue
+		}
 		packages = append(packages, pkg)
 	}
 
@@ -225,7 +228,11 @@ func (s *Service) searchCasks(query string, installedSet map[string]bool) ([]Bre
 
 // Install installs a package
 func (s *Service) Install(name, pkgType string) error {
-	args := []string{pkgType, name}
+	args := []string{"install"}
+	if pkgType == "cask" {
+		args = append(args, "--cask")
+	}
+	args = append(args, name)
 	_, err := s.runBrew(args...)
 	if err != nil {
 		return fmt.Errorf("failed to install %s: %w", name, err)
@@ -235,12 +242,11 @@ func (s *Service) Install(name, pkgType string) error {
 
 // Uninstall uninstalls a package
 func (s *Service) Uninstall(name, pkgType string) error {
-	args := []string{"uninstall", pkgType, name}
+	args := []string{"uninstall"}
 	if pkgType == "cask" {
-		args = []string{"uninstall", "--cask", name}
-	} else {
-		args = []string{"uninstall", "--formula", name}
+		args = append(args, "--cask")
 	}
+	args = append(args, name)
 	_, err := s.runBrew(args...)
 	if err != nil {
 		return fmt.Errorf("failed to uninstall %s: %w", name, err)
