@@ -25,8 +25,9 @@ function switchTab(tab) {
 
     // Load data for the tab (uses cache, refreshes in background)
     if (tab === 'dashboard') refreshDashboard();
-    else if (tab === 'installed') loadInstalled();
+    else if (tab === 'installed-cask' || tab === 'installed-formula') loadInstalled(tab);
     else if (tab === 'outdated') loadOutdated();
+    else if (tab === 'taps') loadTaps();
     else if (tab === 'settings') loadSettings();
     else if (tab === 'dependencies') loadDependencies();
 }
@@ -165,7 +166,20 @@ const tabCache = {
     installed:   { data: null, timestamp: 0 },
     outdated:    { data: null, timestamp: 0 },
     settings:    { data: null, timestamp: 0 },
+    taps:        { data: null, timestamp: 0 },
 };
+
+// Pre-load installed packages on startup for instant tab switch
+let installedPackages = [];
+(async () => {
+    try {
+        installedPackages = await window.go.main.Service.ListInstalled();
+        tabCache.installed.data = installedPackages;
+        tabCache.installed.timestamp = Date.now();
+    } catch (err) {
+        console.warn('预加载已安装包失败:', err);
+    }
+})();
 
 // Cache TTL in milliseconds (5 minutes)
 const CACHE_TTL = 5 * 60 * 1000;
@@ -176,7 +190,7 @@ function isCacheValid(cache) {
 
 function markCacheDirty(tab) {
     // When a user action changes data, invalidate the cache for affected tabs
-    if (tab === 'installed' || tab === 'dashboard') {
+    if ((tab === 'installed-cask' || tab === 'installed-formula') || tab === 'dashboard') {
         tabCache.dashboard.data = null;
         tabCache.dashboard.timestamp = 0;
         tabCache.installed.data = null;
@@ -191,6 +205,10 @@ function markCacheDirty(tab) {
     if (tab === 'settings') {
         tabCache.settings.data = null;
         tabCache.settings.timestamp = 0;
+    }
+    if (tab === 'taps') {
+        tabCache.taps.data = null;
+        tabCache.taps.timestamp = 0;
     }
 }
 
@@ -282,76 +300,58 @@ function renderDashboard(data) {
 }
 
 // ===== Installed =====
-let allInstalledPackages = [];
-
-async function loadInstalled() {
-    // If cache is valid, render immediately from cache
-    if (isCacheValid(tabCache.installed)) {
-        allInstalledPackages = tabCache.installed.data;
-        renderInstalled(allInstalledPackages);
-        // Still refresh in background
-        loadInstalledInBackground();
-        return;
-    }
-
-    try {
-        const packages = await window.go.main.Service.ListInstalled();
-        allInstalledPackages = packages;
-        tabCache.installed.data = packages;
-        tabCache.installed.timestamp = Date.now();
-        renderInstalled(packages);
-    } catch (err) {
-        document.getElementById('installed-tbody').innerHTML =
-            `<tr><td colspan="5" class="empty-state">加载失败: ${err.message}</td></tr>`;
-    }
+async function loadInstalled(tab) {
+    const type = tab === 'installed-cask' ? 'cask' : 'formula';
+    // Use pre-loaded data immediately, refresh in background
+    renderInstalled(type, installedPackages);
+    loadInstalledInBackground(type);
 }
 
-async function loadInstalledInBackground() {
+async function loadInstalledInBackground(type) {
     try {
         const packages = await window.go.main.Service.ListInstalled();
-        allInstalledPackages = packages;
+        installedPackages = packages;
         tabCache.installed.data = packages;
         tabCache.installed.timestamp = Date.now();
-
-        // Only re-render if still on installed tab
-        if (currentTab === 'installed') {
-            renderInstalled(packages);
+        if (currentTab === 'installed-cask' || currentTab === 'installed-formula') {
+            renderInstalled(type, packages);
         }
     } catch (err) {
         // Silently fail for background refresh
     }
 }
 
-function renderInstalled(packages) {
-    const tbody = document.getElementById('installed-tbody');
-    if (packages.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无数据</td></tr>';
+function renderInstalled(type, packages) {
+    const searchInputId = type === 'cask' ? 'installed-cask-search' : 'installed-formula-search';
+    const containerId = type === 'cask' ? 'cask-list' : 'formula-list';
+    const search = document.getElementById(searchInputId).value.toLowerCase();
+    const filtered = packages.filter(p => {
+        if (p.type !== type) return false;
+        if (!search) return true;
+        return p.name.toLowerCase().includes(search) ||
+               (p.description && p.description.toLowerCase().includes(search));
+    });
+
+    const container = document.getElementById(containerId);
+    if (filtered.length === 0) {
+        container.innerHTML = '<p class="empty-state">暂无数据</p>';
         return;
     }
-    tbody.innerHTML = packages.map(p => `
-        <tr>
-            <td class="name-cell">${escapeHtml(p.name)}</td>
-            <td>${escapeHtml(p.version || '-')}</td>
-            <td><span class="type-badge ${p.type}">${p.type === 'cask' ? '应用' : '公式'}</span></td>
-            <td style="color:var(--text-secondary);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(p.description || '-')}</td>
-            <td>
-                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(allInstalledPackages.find(x => x.name === '${escapeHtml(p.name)}' && x))">详情</button>
-                <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${p.type}')">卸载</button>
-            </td>
-        </tr>
+    container.innerHTML = filtered.map(p => `
+        <div class="pkg-item">
+            <span class="pkg-name">${escapeHtml(p.name)}</span>
+            <span class="pkg-version">${escapeHtml(p.version || '-')}</span>
+            <span class="pkg-desc">${escapeHtml(p.description || '-')}</span>
+            <div class="pkg-actions">
+                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(installedPackages.find(x => x.name === '${escapeHtml(p.name)}' && x))">详情</button>
+                <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${type}')">卸载</button>
+            </div>
+        </div>
     `).join('');
 }
 
-function filterInstalled() {
-    const search = document.getElementById('installed-search').value.toLowerCase();
-    const filter = document.getElementById('installed-filter').value;
-
-    const filtered = allInstalledPackages.filter(p => {
-        const matchSearch = !search || p.name.toLowerCase().includes(search) || (p.description && p.description.toLowerCase().includes(search));
-        const matchFilter = filter === 'all' || p.type === filter;
-        return matchSearch && matchFilter;
-    });
-    renderInstalled(filtered);
+function filterInstalled(type) {
+    renderInstalled(type, installedPackages);
 }
 
 async function uninstallPackage(name, type) {
@@ -368,7 +368,7 @@ async function uninstallPackage(name, type) {
                 tabCache.installed.timestamp = 0;
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
-                allInstalledPackages = [];
+                installedPackages = [];
                 loadInstalled();
                 addRecentAction('uninstall', name);
             } catch (err) {
@@ -433,7 +433,7 @@ async function installPackage(name, type) {
                 tabCache.installed.timestamp = 0;
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
-                allInstalledPackages = [];
+                installedPackages = [];
                 addRecentAction('install', name);
                 doSearch(document.getElementById('search-input').value);
             } catch (err) {
@@ -567,14 +567,13 @@ async function loadSettings() {
 }
 
 async function fetchSettingsData() {
-    // Parallel: all four Go calls run simultaneously
-    const [version, taps, diskUsage, stats] = await Promise.all([
+    // Parallel: all three Go calls run simultaneously
+    const [version, diskUsage, stats] = await Promise.all([
         window.go.main.App.Version(),
-        window.go.main.Service.GetTaps(),
         window.go.main.Service.GetDiskUsage(),
         window.go.main.Service.GetStats(),
     ]);
-    return { version, taps, diskUsage, stats };
+    return { version, diskUsage, stats };
 }
 
 async function loadSettingsInBackground() {
@@ -593,7 +592,7 @@ async function loadSettingsInBackground() {
 }
 
 function renderSettings(data) {
-    const { version, taps, diskUsage, stats } = data;
+    const { version, diskUsage, stats } = data;
 
     // Brew info
     document.getElementById('brew-info-list').innerHTML = `
@@ -604,17 +603,6 @@ function renderSettings(data) {
             return '';
         }).join('') : ''}
     `;
-
-    // Taps
-    document.getElementById('taps-list').innerHTML = taps.length > 0
-        ? taps.map(t => {
-            const tapName = t.split(' ')[0];
-            return `<div class="tap-item">
-                <span class="tap-name">${escapeHtml(tapName)}</span>
-                <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')" style="padding:2px 8px;font-size:11px;">移除</button>
-            </div>`;
-        }).join('')
-        : '<p class="empty-state" style="padding:12px;">暂无 taps</p>';
 
     // Disk usage detailed
     document.getElementById('disk-usage-detailed').innerHTML = Object.entries(diskUsage).map(([label, value]) => `
@@ -679,7 +667,7 @@ async function loadDependencies() {
             return;
         }
 
-        const installedSet = new Set(allInstalledPackages.map(p => p.name));
+        const installedSet = new Set(installedPackages.map(p => p.name));
 
         container.innerHTML = deps.map(dep => {
             const isInstalled = installedSet.has(dep);
@@ -732,7 +720,49 @@ async function autoremoveDeps() {
     );
 }
 
-// ===== Tap Management =====
+// ===== Taps Management =====
+async function loadTaps() {
+    if (isCacheValid(tabCache.taps)) {
+        renderTaps(tabCache.taps.data);
+        loadTapsInBackground();
+        return;
+    }
+
+    try {
+        const taps = await window.go.main.Service.GetTaps();
+        tabCache.taps.data = taps;
+        tabCache.taps.timestamp = Date.now();
+        renderTaps(taps);
+    } catch (err) {
+        document.getElementById('taps-list').innerHTML = `<p class="empty-state">加载失败: ${err.message}</p>`;
+    }
+}
+
+async function loadTapsInBackground() {
+    try {
+        const taps = await window.go.main.Service.GetTaps();
+        tabCache.taps.data = taps;
+        tabCache.taps.timestamp = Date.now();
+        if (currentTab === 'taps') {
+            renderTaps(taps);
+        }
+    } catch (err) {
+        // Silently fail
+    }
+}
+
+function renderTaps(taps) {
+    document.getElementById('taps-list').innerHTML = taps.length > 0
+        ? taps.map(t => {
+            const tapName = t.split(' ')[0];
+            return `<div class="tap-item">
+                <span class="tap-name">${escapeHtml(tapName)}</span>
+                <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')" style="padding:2px 8px;font-size:11px;">移除</button>
+            </div>`;
+        }).join('')
+        : '<p class="empty-state" style="padding:12px;">暂无 taps</p>';
+}
+
 async function addTap() {
     const input = document.getElementById('tap-input');
     const tap = input.value.trim();
@@ -745,10 +775,10 @@ async function addTap() {
         await window.go.main.Service.AddTap(tap);
         showToast(`Tap ${tap} 添加成功`, 'success');
         input.value = '';
-        markCacheDirty('settings');
-        tabCache.settings.data = null;
-        tabCache.settings.timestamp = 0;
-        loadSettings();
+        markCacheDirty('taps');
+        tabCache.taps.data = null;
+        tabCache.taps.timestamp = 0;
+        loadTaps();
     } catch (err) {
         showToast('添加 Tap 失败: ' + err.message, 'error');
     }
@@ -762,10 +792,10 @@ async function removeTap(tap) {
             try {
                 await window.go.main.Service.RemoveTap(tap);
                 showToast(`Tap ${tap} 已移除`, 'success');
-                markCacheDirty('settings');
-                tabCache.settings.data = null;
-                tabCache.settings.timestamp = 0;
-                loadSettings();
+                markCacheDirty('taps');
+                tabCache.taps.data = null;
+                tabCache.taps.timestamp = 0;
+                loadTaps();
             } catch (err) {
                 showToast('移除失败: ' + err.message, 'error');
             }

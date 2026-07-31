@@ -869,6 +869,53 @@ body {
   to { transform: rotate(360deg); }
 }
 
+/* ===== Installed List ===== */
+.pkg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pkg-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  transition: background-color 0.15s;
+}
+
+.pkg-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.pkg-name {
+  font-weight: 500;
+  font-size: 13px;
+  min-width: 180px;
+}
+
+.pkg-version {
+  color: var(--text-secondary);
+  font-size: 13px;
+  min-width: 80px;
+}
+
+.pkg-desc {
+  flex: 1;
+  color: var(--text-muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pkg-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 /* ===== Scrollbar ===== */
 .main-content::-webkit-scrollbar {
   width: 8px;
