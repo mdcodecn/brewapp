@@ -6,10 +6,32 @@ export function AddTap(arg1:string):Promise<void>;
 
 export function Autoremove():Promise<void>;
 
+export function Config():Promise<string>;
+
+export function Doctor():Promise<string>;
+
 export function GetDependencies(arg1:string):Promise<Array<string>>;
+
+export function GetLeaves():Promise<Array<string>>;
+
+export function GetMissing():Promise<Array<string>>;
 
 export function GetOutdatedWithVersion():Promise<Array<main.BrewPackage>>;
 
+export function GetUses(arg1:string):Promise<Array<string>>;
+
+export function GetVulns():Promise<string>;
+
+export function Link(arg1:string):Promise<void>;
+
+export function Pin(arg1:string):Promise<void>;
+
 export function RemoveTap(arg1:string):Promise<void>;
+
+export function Unlink(arg1:string):Promise<void>;
+
+export function Unpin(arg1:string):Promise<void>;
+
+export function Update():Promise<void>;
 
 export function Version():Promise<string>;

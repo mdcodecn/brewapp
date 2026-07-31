@@ -1147,6 +1147,22 @@ body {
   flex-shrink: 0;
 }
 
+/* ===== Output Pre ===== */
+.output-pre {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
 /* ===== Scrollbar ===== */
 .main-content::-webkit-scrollbar {
   width: 8px;

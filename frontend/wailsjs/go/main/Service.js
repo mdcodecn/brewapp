@@ -14,6 +14,14 @@ export function Cleanup() {
   return window['go']['main']['Service']['Cleanup']();
 }
 
+export function Config() {
+  return window['go']['main']['Service']['Config']();
+}
+
+export function Doctor() {
+  return window['go']['main']['Service']['Doctor']();
+}
+
 export function ExportConfig() {
   return window['go']['main']['Service']['ExportConfig']();
 }
@@ -24,6 +32,14 @@ export function GetDependencies(arg1) {
 
 export function GetDiskUsage() {
   return window['go']['main']['Service']['GetDiskUsage']();
+}
+
+export function GetLeaves() {
+  return window['go']['main']['Service']['GetLeaves']();
+}
+
+export function GetMissing() {
+  return window['go']['main']['Service']['GetMissing']();
 }
 
 export function GetOutdated() {
@@ -50,16 +66,32 @@ export function GetTaps() {
   return window['go']['main']['Service']['GetTaps']();
 }
 
+export function GetUses(arg1) {
+  return window['go']['main']['Service']['GetUses'](arg1);
+}
+
 export function GetVersion() {
   return window['go']['main']['Service']['GetVersion']();
+}
+
+export function GetVulns() {
+  return window['go']['main']['Service']['GetVulns']();
 }
 
 export function Install(arg1, arg2) {
   return window['go']['main']['Service']['Install'](arg1, arg2);
 }
 
+export function Link(arg1) {
+  return window['go']['main']['Service']['Link'](arg1);
+}
+
 export function ListInstalled() {
   return window['go']['main']['Service']['ListInstalled']();
+}
+
+export function Pin(arg1) {
+  return window['go']['main']['Service']['Pin'](arg1);
 }
 
 export function Reinstall(arg1, arg2) {
@@ -76,6 +108,18 @@ export function Search(arg1) {
 
 export function Uninstall(arg1, arg2) {
   return window['go']['main']['Service']['Uninstall'](arg1, arg2);
+}
+
+export function Unlink(arg1) {
+  return window['go']['main']['Service']['Unlink'](arg1);
+}
+
+export function Unpin(arg1) {
+  return window['go']['main']['Service']['Unpin'](arg1);
+}
+
+export function Update() {
+  return window['go']['main']['Service']['Update']();
 }
 
 export function Upgrade(arg1) {

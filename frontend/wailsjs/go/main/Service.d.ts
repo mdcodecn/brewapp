@@ -8,11 +8,19 @@ export function Autoremove():Promise<void>;
 
 export function Cleanup():Promise<void>;
 
+export function Config():Promise<string>;
+
+export function Doctor():Promise<string>;
+
 export function ExportConfig():Promise<string>;
 
 export function GetDependencies(arg1:string):Promise<Array<string>>;
 
 export function GetDiskUsage():Promise<Record<string, string>>;
+
+export function GetLeaves():Promise<Array<string>>;
+
+export function GetMissing():Promise<Array<string>>;
 
 export function GetOutdated():Promise<Array<main.BrewPackage>>;
 
@@ -26,11 +34,19 @@ export function GetStats():Promise<Record<string, string>>;
 
 export function GetTaps():Promise<Array<string>>;
 
+export function GetUses(arg1:string):Promise<Array<string>>;
+
 export function GetVersion():Promise<string>;
+
+export function GetVulns():Promise<string>;
 
 export function Install(arg1:string,arg2:string):Promise<void>;
 
+export function Link(arg1:string):Promise<void>;
+
 export function ListInstalled():Promise<Array<main.BrewPackage>>;
+
+export function Pin(arg1:string):Promise<void>;
 
 export function Reinstall(arg1:string,arg2:string):Promise<void>;
 
@@ -39,5 +55,11 @@ export function RemoveTap(arg1:string):Promise<void>;
 export function Search(arg1:string):Promise<Array<main.BrewSearchResult>>;
 
 export function Uninstall(arg1:string,arg2:string):Promise<void>;
+
+export function Unlink(arg1:string):Promise<void>;
+
+export function Unpin(arg1:string):Promise<void>;
+
+export function Update():Promise<void>;
 
 export function Upgrade(arg1:Array<string>):Promise<void>;

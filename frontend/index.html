@@ -66,13 +66,14 @@
                 </svg>
                 <span>Taps 管理</span>
             </button>
-            <button class="nav-item" data-tab="settings">
+            <button class="nav-item" data-tab="config">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                 </svg>
-                <span>设置</span>
+                <span>配置</span>
             </button>
+
         </nav>
         <div class="sidebar-footer">
             <div id="brew-version" class="brew-version">Loading...</div>
@@ -219,6 +220,28 @@
                 </div>
             </div>
             <div class="dependency-section">
+                <h2>反向依赖 (谁依赖它)</h2>
+                <div class="dependency-search">
+                    <input type="text" id="uses-search-input" class="search-input" placeholder="输入包名查看谁依赖它...">
+                    <button class="btn btn-primary" onclick="loadUses()">查询</button>
+                </div>
+                <div id="uses-results" class="dependency-results">
+                    <p class="empty-state">输入包名查看哪些包依赖它</p>
+                </div>
+            </div>
+            <div class="dependency-section">
+                <h2>顶层包 (Leaves)</h2>
+                <p class="dependency-hint">直接安装、不被其他包依赖的顶层包。</p>
+                <button class="btn btn-secondary" onclick="loadLeaves()">加载顶层包</button>
+                <div id="leaves-list" class="dependency-results" style="margin-top:12px;"></div>
+            </div>
+            <div class="dependency-section">
+                <h2>缺失依赖</h2>
+                <p class="dependency-hint">检查是否有包缺少依赖项。</p>
+                <button class="btn btn-secondary" onclick="loadMissing()">检查缺失依赖</button>
+                <div id="missing-list" class="dependency-results" style="margin-top:12px;"></div>
+            </div>
+            <div class="dependency-section">
                 <h2>孤立依赖清理</h2>
                 <p class="dependency-hint">清理不再被任何已安装包依赖的孤立依赖包，释放磁盘空间。</p>
                 <button class="btn btn-warning" onclick="autoremoveDeps()">执行清理</button>
@@ -240,18 +263,55 @@
             </div>
         </div>
 
-        <!-- Settings -->
-        <div class="tab-content" id="tab-settings">
-            <div class="page-header"><h1>设置</h1></div>
+        <!-- Config (includes Update, Doctor, Vulnerabilities) -->
+        <div class="tab-content" id="tab-config">
+            <div class="page-header"><h1>配置</h1></div>
+
+            <!-- Brew Config -->
             <div class="settings-section">
-                <h2>Brew 信息</h2>
-                <div class="info-list" id="brew-info-list"></div>
+                <h2>Brew 配置</h2>
+                <pre id="config-output" class="output-pre">加载中...</pre>
             </div>
+
+            <!-- Update -->
             <div class="settings-section">
-                <h2>磁盘使用详情</h2>
-                <div id="disk-usage-detailed" class="disk-usage-grid"></div>
+                <h2>Homebrew 更新</h2>
+                <button class="btn btn-primary" id="update-btn" onclick="runUpdate()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                    执行 brew update
+                </button>
+                <pre id="update-output" class="output-pre" style="margin-top:12px;">点击「执行 brew update」开始更新...</pre>
+            </div>
+
+            <!-- Doctor -->
+            <div class="settings-section">
+                <h2>系统诊断</h2>
+                <button class="btn btn-primary" onclick="runDoctor()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                    </svg>
+                    运行 brew doctor
+                </button>
+                <pre id="doctor-output" class="output-pre" style="margin-top:12px;">点击「运行 brew doctor」检查系统状态...</pre>
+            </div>
+
+            <!-- Vulnerabilities -->
+            <div class="settings-section">
+                <h2>安全漏洞扫描</h2>
+                <button class="btn btn-primary" onclick="runVulns()">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    扫描漏洞
+                </button>
+                <pre id="vulns-output" class="output-pre" style="margin-top:12px;">点击「扫描漏洞」检查已知安全漏洞...</pre>
             </div>
         </div>
+
+
     </main>
 
     <!-- Toast Container -->

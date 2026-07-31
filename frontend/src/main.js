@@ -1,3 +1,7 @@
+// ===== Wails Bindings =====
+import * as App from '../wailsjs/go/main/App';
+import * as Service from '../wailsjs/go/main/Service';
+
 // ===== Tab Navigation with Slide Transition =====
 let currentTab = 'dashboard';
 
@@ -28,8 +32,10 @@ function switchTab(tab) {
     else if (tab === 'installed-cask' || tab === 'installed-formula') loadInstalled(tab);
     else if (tab === 'outdated') loadOutdated();
     else if (tab === 'taps') loadTaps();
-    else if (tab === 'settings') loadSettings();
-    else if (tab === 'dependencies') loadDependencies();
+    else if (tab === 'dependencies') {
+        // Dependencies tab doesn't auto-load, waits for user input
+    }
+    else if (tab === 'config') loadConfig();
 }
 
 document.querySelectorAll('.nav-item').forEach(btn => {
@@ -65,6 +71,7 @@ function showModal(title, body, onConfirm) {
     });
 }
 
+window.closeModal = closeModal;
 function closeModal() {
     document.getElementById('modal-overlay').style.display = 'none';
 }
@@ -72,6 +79,7 @@ function closeModal() {
 // ===== Package Detail Modal =====
 let currentDetailPackage = null;
 
+window.showDetailModal = showDetailModal;
 function showDetailModal(pkg) {
     currentDetailPackage = pkg;
     document.getElementById('detail-modal-title').textContent = pkg.name;
@@ -83,7 +91,7 @@ function showDetailModal(pkg) {
     document.getElementById('detail-modal-overlay').style.display = 'flex';
 
     // Load full package info
-    window.go.main.Service.GetPackageInfo(pkg.name, pkg.type).then(info => {
+    Service.GetPackageInfo(pkg.name, pkg.type).then(info => {
         renderDetailModal(info);
     }).catch(err => {
         body.innerHTML = `<p class="empty-state">加载详情失败: ${err.message}</p>`;
@@ -115,8 +123,8 @@ function renderDetailModal(info) {
         </div>
     `;
 
-    // Load dependencies
-    window.go.main.Service.GetDependencies(info.name).then(deps => {
+    // Load dependencies (async, don't block the main info display)
+    Service.GetDependencies(info.name).then(deps => {
         if (deps && deps.length > 0) {
             html += `<div style="margin-top:16px;"><strong>依赖 (${deps.length}):</strong>`;
             html += `<div class="detail-deps-list">`;
@@ -127,43 +135,67 @@ function renderDetailModal(info) {
         } else {
             html += `<div style="margin-top:16px;color:var(--text-secondary);font-size:13px;">暂无依赖信息</div>`;
         }
-
-        // Set action buttons based on installed status
-        if (info.installed) {
-            // Add reinstall button before the action button
-            const reinstallBtn = document.createElement('button');
-            reinstallBtn.textContent = '重装';
-            reinstallBtn.className = 'btn btn-secondary';
-            reinstallBtn.onclick = () => {
-                closeDetailModal();
-                reinstallPackage(info.name, info.type);
-            };
-            actionBtn.parentNode.insertBefore(reinstallBtn, actionBtn);
-
-            actionBtn.textContent = '卸载';
-            actionBtn.className = 'btn btn-danger';
-            actionBtn.style.display = 'inline-flex';
-            actionBtn.onclick = () => {
-                closeDetailModal();
-                uninstallPackage(info.name, info.type);
-            };
-        } else {
-            actionBtn.textContent = '安装';
-            actionBtn.className = 'btn btn-primary';
-            actionBtn.style.display = 'inline-flex';
-            actionBtn.onclick = () => {
-                closeDetailModal();
-                installPackage(info.name, info.type);
-            };
-        }
-
         body.innerHTML = html;
     }).catch(() => {
         // Dependencies failed, still show basic info
-        body.innerHTML = html + `<div style="margin-top:16px;color:var(--text-muted);font-size:12px;">依赖信息加载失败</div>`;
+        body.innerHTML = html;
     });
+
+    // Set action buttons based on installed status (not dependent on deps loading)
+    if (info.installed) {
+        // Add pin/unpin button
+        const pinBtn = document.createElement('button');
+        pinBtn.textContent = '锁定';
+        pinBtn.className = 'btn btn-secondary';
+        pinBtn.onclick = () => {
+            closeDetailModal();
+            pinPackage(info.name);
+        };
+        actionBtn.parentNode.insertBefore(pinBtn, actionBtn);
+
+        // Add reinstall button before the action button
+        const reinstallBtn = document.createElement('button');
+        reinstallBtn.textContent = '重装';
+        reinstallBtn.className = 'btn btn-secondary';
+        reinstallBtn.onclick = () => {
+            closeDetailModal();
+            reinstallPackage(info.name, info.type);
+        };
+        actionBtn.parentNode.insertBefore(reinstallBtn, actionBtn);
+
+        // Add link/unlink button for casks
+        if (info.type === 'cask') {
+            const linkBtn = document.createElement('button');
+            linkBtn.textContent = '链接';
+            linkBtn.className = 'btn btn-secondary';
+            linkBtn.onclick = () => {
+                closeDetailModal();
+                unlinkPackage(info.name);
+            };
+            actionBtn.parentNode.insertBefore(linkBtn, actionBtn);
+        }
+
+        actionBtn.textContent = '卸载';
+        actionBtn.className = 'btn btn-danger';
+        actionBtn.style.display = 'inline-flex';
+        actionBtn.onclick = () => {
+            closeDetailModal();
+            uninstallPackage(info.name, info.type);
+        };
+    } else {
+        actionBtn.textContent = '安装';
+        actionBtn.className = 'btn btn-primary';
+        actionBtn.style.display = 'inline-flex';
+        actionBtn.onclick = () => {
+            closeDetailModal();
+            installPackage(info.name, info.type);
+        };
+    }
+
+    body.innerHTML = html;
 }
 
+window.closeDetailModal = closeDetailModal;
 function closeDetailModal() {
     document.getElementById('detail-modal-overlay').style.display = 'none';
     currentDetailPackage = null;
@@ -175,15 +207,16 @@ const tabCache = {
     dashboard:  { data: null, timestamp: 0 },
     installed:   { data: null, timestamp: 0 },
     outdated:    { data: null, timestamp: 0 },
-    settings:    { data: null, timestamp: 0 },
-    taps:        { data: null, timestamp: 0 },
+
+    taps:     { data: null, timestamp: 0 },
+    config:   { data: null, timestamp: 0 },
 };
 
 // Pre-load installed packages on startup for instant tab switch
 let installedPackages = [];
 (async () => {
     try {
-        installedPackages = await window.go.main.Service.ListInstalled();
+        installedPackages = await Service.ListInstalled();
         tabCache.installed.data = installedPackages;
         tabCache.installed.timestamp = Date.now();
     } catch (err) {
@@ -212,17 +245,20 @@ function markCacheDirty(tab) {
         tabCache.outdated.data = null;
         tabCache.outdated.timestamp = 0;
     }
-    if (tab === 'settings') {
-        tabCache.settings.data = null;
-        tabCache.settings.timestamp = 0;
-    }
+
     if (tab === 'taps') {
         tabCache.taps.data = null;
         tabCache.taps.timestamp = 0;
     }
+    // Config tab includes update, doctor, vulns
+    if (tab === 'config' || tab === 'update' || tab === 'doctor' || tab === 'vulns') {
+        tabCache.config.data = null;
+        tabCache.config.timestamp = 0;
+    }
 }
 
 // ===== Dashboard =====
+window.refreshDashboard = refreshDashboard;
 async function refreshDashboard() {
     // If cache is valid, render immediately from cache
     if (isCacheValid(tabCache.dashboard)) {
@@ -235,8 +271,8 @@ async function refreshDashboard() {
     try {
         // Quick: ListInstalled + GetDiskUsage (local, fast)
         const [packages, diskUsage] = await Promise.all([
-            window.go.main.Service.ListInstalled(),
-            window.go.main.Service.GetDiskUsage(),
+            Service.ListInstalled(),
+            Service.GetDiskUsage(),
         ]);
         const quickData = { packages, diskUsage, outdated: [] };
         tabCache.dashboard.data = quickData;
@@ -252,7 +288,7 @@ async function refreshDashboard() {
 
 async function refreshDashboardInBackground() {
     try {
-        const outdated = await window.go.main.Service.GetOutdated();
+        const outdated = await Service.GetOutdated();
         tabCache.dashboard.data.outdated = outdated;
         tabCache.dashboard.timestamp = Date.now();
         // Only re-render if still on dashboard tab
@@ -267,9 +303,9 @@ async function refreshDashboardInBackground() {
 async function fetchDashboardData() {
     // Parallel: all three Go calls run simultaneously
     const [packages, outdated, diskUsage] = await Promise.all([
-        window.go.main.Service.ListInstalled(),
-        window.go.main.Service.GetOutdated(),
-        window.go.main.Service.GetDiskUsage(),
+        Service.ListInstalled(),
+        Service.GetOutdated(),
+        Service.GetDiskUsage(),
     ]);
     return { packages, outdated, diskUsage };
 }
@@ -328,14 +364,19 @@ function renderDashboard(data) {
 // ===== Installed =====
 async function loadInstalled(tab) {
     const type = tab === 'installed-cask' ? 'cask' : 'formula';
-    // Use pre-loaded data immediately, refresh in background
-    renderInstalled(type, installedPackages);
+    // Wait for pre-load to complete, then render
+    if (installedPackages.length === 0) {
+        // Not yet loaded, show loading state
+        renderInstalled(type, []);
+    } else {
+        renderInstalled(type, installedPackages);
+    }
     loadInstalledInBackground(type);
 }
 
 async function loadInstalledInBackground(type) {
     try {
-        const packages = await window.go.main.Service.ListInstalled();
+        const packages = await Service.ListInstalled();
         installedPackages = packages;
         tabCache.installed.data = packages;
         tabCache.installed.timestamp = Date.now();
@@ -381,7 +422,7 @@ function renderInstalled(type, packages) {
             <span class="pkg-version">${escapeHtml(p.version || '-')}</span>
             <span class="pkg-desc">${escapeHtml(p.description || '-')}</span>
             <div class="pkg-actions">
-                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(installedPackages.find(x => x.name === '${escapeHtml(p.name)}' && x))">详情</button>
+                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${JSON.stringify(p).replace(/'/g, "&#39;")})">详情</button>
                 <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${type}')">重装</button>
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${type}')">卸载</button>
             </div>
@@ -389,17 +430,19 @@ function renderInstalled(type, packages) {
     `).join('');
 }
 
+window.filterInstalled = filterInstalled;
 function filterInstalled(type) {
     renderInstalled(type, installedPackages);
 }
 
+window.reinstallPackage = reinstallPackage;
 async function reinstallPackage(name, type) {
     showModal(
         '确认重装',
         `确定要重装 <strong>${escapeHtml(name)}</strong> 吗？这将重新下载并安装该包。`,
         async () => {
             try {
-                await window.go.main.Service.Reinstall(name, type);
+                await Service.Reinstall(name, type);
                 showToast(`${name} 重装成功`, 'success');
                 addRecentAction('reinstall', name);
                 // Reload after a short delay
@@ -417,13 +460,14 @@ async function reinstallPackage(name, type) {
     );
 }
 
+window.uninstallPackage = uninstallPackage;
 async function uninstallPackage(name, type) {
     showModal(
         '确认卸载',
         `确定要卸载 <strong>${escapeHtml(name)}</strong> 吗？`,
         async () => {
             try {
-                await window.go.main.Service.Uninstall(name, type);
+                await Service.Uninstall(name, type);
                 showToast(`${name} 已卸载`, 'success');
                 markCacheDirty('installed');
                 // Clear cache and reload
@@ -444,12 +488,14 @@ async function uninstallPackage(name, type) {
 // ===== Search =====
 let searchTimeout = null;
 
+window.debounceSearch = debounceSearch;
 function debounceSearch() {
     clearTimeout(searchTimeout);
     const input = document.getElementById('search-input');
     searchTimeout = setTimeout(() => doSearch(input.value), 300);
 }
 
+window.doSearch = doSearch;
 async function doSearch(query) {
     const container = document.getElementById('search-results');
     if (!query || query.trim() === '') {
@@ -460,7 +506,7 @@ async function doSearch(query) {
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 搜索中...</div>';
 
     try {
-        const results = await window.go.main.Service.Search(query);
+        const results = await Service.Search(query);
         if (!results || results.length === 0) {
             container.innerHTML = '<p class="empty-state">未找到匹配的结果</p>';
             return;
@@ -481,13 +527,14 @@ async function doSearch(query) {
     }
 }
 
+window.installPackage = installPackage;
 async function installPackage(name, type) {
     showModal(
         '确认安装',
         `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？`,
         async () => {
             try {
-                await window.go.main.Service.Install(name, type);
+                await Service.Install(name, type);
                 showToast(`${name} 安装成功`, 'success');
                 markCacheDirty('installed');
                 markCacheDirty('dashboard');
@@ -507,6 +554,7 @@ async function installPackage(name, type) {
 }
 
 // ===== Outdated =====
+window.loadOutdated = loadOutdated;
 async function loadOutdated() {
     // If cache is valid, render immediately from cache
     if (isCacheValid(tabCache.outdated)) {
@@ -517,7 +565,7 @@ async function loadOutdated() {
     }
 
     try {
-        const outdated = await window.go.main.Service.GetOutdated();
+        const outdated = await Service.GetOutdated();
         tabCache.outdated.data = outdated;
         tabCache.outdated.timestamp = Date.now();
         renderOutdated(outdated);
@@ -529,7 +577,7 @@ async function loadOutdated() {
 
 async function loadOutdatedInBackground() {
     try {
-        const outdated = await window.go.main.Service.GetOutdated();
+        const outdated = await Service.GetOutdated();
         tabCache.outdated.data = outdated;
         tabCache.outdated.timestamp = Date.now();
 
@@ -542,6 +590,7 @@ async function loadOutdatedInBackground() {
     }
 }
 
+window.upgradePackage = upgradePackage;
 function renderOutdated(outdated) {
     const tbody = document.getElementById('outdated-tbody');
 
@@ -554,7 +603,7 @@ function renderOutdated(outdated) {
         <tr>
             <td class="name-cell">${escapeHtml(p.name)}</td>
             <td>${escapeHtml(p.version || '-')}</td>
-            <td><span class="type-badge ${p.type}">${p.type === 'cask' ? '应用' : '公式'}</span></td>
+            <td><span class="type-badge ${p.type}">${escapeHtml(p.type)}</span></td>
             <td>
                 <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
             </td>
@@ -564,7 +613,7 @@ function renderOutdated(outdated) {
 
 async function upgradePackage(name) {
     try {
-        await window.go.main.Service.Upgrade([name]);
+        await Service.Upgrade([name]);
         showToast(`${name} 更新成功`, 'success');
         markCacheDirty('outdated');
         markCacheDirty('dashboard');
@@ -579,6 +628,7 @@ async function upgradePackage(name) {
     }
 }
 
+window.upgradeAll = upgradeAll;
 async function upgradeAll() {
     showModal(
         '全部更新',
@@ -588,7 +638,7 @@ async function upgradeAll() {
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span> 更新中...';
             try {
-                await window.go.main.Service.Upgrade([]);
+                await Service.Upgrade([]);
                 showToast('全部更新完成', 'success');
                 markCacheDirty('outdated');
                 markCacheDirty('dashboard');
@@ -609,76 +659,10 @@ async function upgradeAll() {
     );
 }
 
-// ===== Settings =====
-async function loadSettings() {
-    // If cache is valid, render immediately from cache
-    if (isCacheValid(tabCache.settings)) {
-        renderSettings(tabCache.settings.data);
-        // Still refresh in background
-        loadSettingsInBackground();
-        return;
-    }
-
-    try {
-        const data = await fetchSettingsData();
-        tabCache.settings.data = data;
-        tabCache.settings.timestamp = Date.now();
-        renderSettings(data);
-    } catch (err) {
-        showToast('加载设置失败: ' + err.message, 'error');
-    }
-}
-
-async function fetchSettingsData() {
-    // Parallel: all three Go calls run simultaneously
-    const [version, diskUsage, stats] = await Promise.all([
-        window.go.main.App.Version(),
-        window.go.main.Service.GetDiskUsage(),
-        window.go.main.Service.GetStats(),
-    ]);
-    return { version, diskUsage, stats };
-}
-
-async function loadSettingsInBackground() {
-    try {
-        const data = await fetchSettingsData();
-        tabCache.settings.data = data;
-        tabCache.settings.timestamp = Date.now();
-
-        // Only re-render if still on settings tab
-        if (currentTab === 'settings') {
-            renderSettings(data);
-        }
-    } catch (err) {
-        // Silently fail for background refresh
-    }
-}
-
-function renderSettings(data) {
-    const { version, diskUsage, stats } = data;
-
-    // Brew info
-    document.getElementById('brew-info-list').innerHTML = `
-        <div class="info-item"><span class="label">版本</span><span class="value">${escapeHtml(version)}</span></div>
-        ${stats ? Object.entries(stats).map(([key, value]) => {
-            const labels = { installed_formulas: '已安装公式', installed_casks: '已安装应用', outdated: '可更新数量' };
-            const label = labels[key] || key;
-            return `<div class="info-item"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(value)}</span></div>`;
-        }).join('') : ''}
-    `;
-
-    // Disk usage detailed
-    document.getElementById('disk-usage-detailed').innerHTML = Object.entries(diskUsage).map(([label, value]) => `
-        <div class="disk-usage-item">
-            <span class="label">${escapeHtml(label)}</span>
-            <span class="value">${escapeHtml(value)}</span>
-        </div>
-    `).join('');
-}
-
+window.exportConfig = exportConfig;
 async function exportConfig() {
     try {
-        const content = await window.go.main.Service.ExportConfig();
+        const content = await Service.ExportConfig();
         const blob = new Blob([content], { type: 'text/plain' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -692,13 +676,14 @@ async function exportConfig() {
     }
 }
 
+window.cleanupBrew = cleanupBrew;
 async function cleanupBrew() {
     showModal(
         '清理缓存',
         '确定要清理 Homebrew 缓存和旧版本吗？',
         async () => {
             try {
-                await window.go.main.Service.Cleanup();
+                await Service.Cleanup();
                 showToast('清理完成', 'success');
                 markCacheDirty('dashboard');
                 tabCache.dashboard.data = null;
@@ -712,6 +697,7 @@ async function cleanupBrew() {
 }
 
 // ===== Dependency Management =====
+window.loadDependencies = loadDependencies;
 async function loadDependencies() {
     const input = document.getElementById('dep-search-input');
     const name = input.value.trim();
@@ -724,7 +710,7 @@ async function loadDependencies() {
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 查询中...</div>';
 
     try {
-        const deps = await window.go.main.Service.GetDependencies(name);
+        const deps = await Service.GetDependencies(name);
         if (!deps || deps.length === 0) {
             container.innerHTML = '<p class="empty-state">未找到依赖信息（该包可能没有依赖或不存在）</p>';
             return;
@@ -746,15 +732,22 @@ async function loadDependencies() {
 }
 
 // Allow Enter key to trigger dependency search
-document.addEventListener('DOMContentLoaded', () => {
+ document.addEventListener('DOMContentLoaded', () => {
     const depInput = document.getElementById('dep-search-input');
     if (depInput) {
         depInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') loadDependencies();
         });
     }
+    const usesInput = document.getElementById('uses-search-input');
+    if (usesInput) {
+        usesInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadUses();
+        });
+    }
 });
 
+window.autoremoveDeps = autoremoveDeps;
 async function autoremoveDeps() {
     showModal(
         '清理孤立依赖',
@@ -766,7 +759,7 @@ async function autoremoveDeps() {
             resultDiv.textContent = '正在清理...';
 
             try {
-                await window.go.main.Service.Autoremove();
+                await Service.Autoremove();
                 resultDiv.className = 'autoremove-result success';
                 resultDiv.textContent = '✓ 孤立依赖清理完成！';
                 showToast('清理完成', 'success');
@@ -792,7 +785,7 @@ async function loadTaps() {
     }
 
     try {
-        const taps = await window.go.main.Service.GetTaps();
+        const taps = await Service.GetTaps();
         tabCache.taps.data = taps;
         tabCache.taps.timestamp = Date.now();
         renderTaps(taps);
@@ -803,7 +796,7 @@ async function loadTaps() {
 
 async function loadTapsInBackground() {
     try {
-        const taps = await window.go.main.Service.GetTaps();
+        const taps = await Service.GetTaps();
         tabCache.taps.data = taps;
         tabCache.taps.timestamp = Date.now();
         if (currentTab === 'taps') {
@@ -826,6 +819,7 @@ function renderTaps(taps) {
         : '<p class="empty-state" style="padding:12px;">暂无 taps</p>';
 }
 
+window.addTap = addTap;
 async function addTap() {
     const input = document.getElementById('tap-input');
     const tap = input.value.trim();
@@ -835,7 +829,7 @@ async function addTap() {
     }
 
     try {
-        await window.go.main.Service.AddTap(tap);
+        await Service.AddTap(tap);
         showToast(`Tap ${tap} 添加成功`, 'success');
         input.value = '';
         markCacheDirty('taps');
@@ -847,13 +841,14 @@ async function addTap() {
     }
 }
 
+window.removeTap = removeTap;
 async function removeTap(tap) {
     showModal(
         '确认移除 Tap',
         `确定要移除 tap <strong>${escapeHtml(tap)}</strong> 吗？`,
         async () => {
             try {
-                await window.go.main.Service.RemoveTap(tap);
+                await Service.RemoveTap(tap);
                 showToast(`Tap ${tap} 已移除`, 'success');
                 markCacheDirty('taps');
                 tabCache.taps.data = null;
@@ -940,10 +935,231 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// ===== Update (in config tab) =====
+window.runUpdate = async function() {
+    const btn = document.getElementById('update-btn');
+    const output = document.getElementById('update-output');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 更新中...';
+    output.textContent = '正在执行 brew update...\n';
+
+    try {
+        await Service.Update();
+        output.textContent += '\n✓ brew update 完成！';
+        showToast('更新完成', 'success');
+        markCacheDirty('config');
+        tabCache.config.data = output.textContent;
+        tabCache.config.timestamp = Date.now();
+        // Refresh dashboard and outdated
+        tabCache.dashboard.data = null;
+        tabCache.dashboard.timestamp = 0;
+        tabCache.outdated.data = null;
+        tabCache.outdated.timestamp = 0;
+    } catch (err) {
+        output.textContent += '\n✗ 更新失败: ' + err.message;
+        showToast('更新失败: ' + err.message, 'error');
+    }
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+    </svg> 执行 brew update`;
+}
+
+// ===== Doctor (in config tab) =====
+window.runDoctor = async function() {
+    const btn = document.querySelector('#tab-config .settings-section:nth-of-type(2) .btn-primary');
+    const output = document.getElementById('doctor-output');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 诊断中...';
+    output.textContent = '正在运行 brew doctor...\n';
+
+    try {
+        const result = await Service.Doctor();
+        output.textContent = result || '✓ 系统健康，未发现异常';
+        if (output.textContent.includes('Error') || output.textContent.includes('error')) {
+            showToast('诊断发现警告', 'error');
+        } else {
+            showToast('诊断完成', 'success');
+        }
+        markCacheDirty('config');
+        tabCache.config.data = output.textContent;
+        tabCache.config.timestamp = Date.now();
+    } catch (err) {
+        output.textContent = '诊断失败: ' + err.message;
+        showToast('诊断失败', 'error');
+    }
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+    </svg> 运行 brew doctor`;
+}
+
+// ===== Config =====
+async function loadConfig() {
+    if (isCacheValid(tabCache.config)) {
+        document.getElementById('config-output').textContent = tabCache.config.data || '';
+        return;
+    }
+    try {
+        const result = await Service.Config();
+        document.getElementById('config-output').textContent = result || '暂无配置信息';
+        tabCache.config.data = result;
+        tabCache.config.timestamp = Date.now();
+    } catch (err) {
+        document.getElementById('config-output').textContent = '加载配置失败: ' + err.message;
+    }
+}
+
+// ===== Vulnerabilities (in config tab) =====
+window.runVulns = async function() {
+    const btn = document.querySelector('#tab-config .settings-section:nth-of-type(3) .btn-primary');
+    const output = document.getElementById('vulns-output');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> 扫描中...';
+    output.textContent = '正在扫描已知安全漏洞...\n';
+
+    try {
+        const result = await Service.GetVulns();
+        output.textContent = result || '✓ 未发现已知安全漏洞';
+        if (output.textContent.includes('Vulnerabilities') && !output.textContent.includes('No vulnerabilities')) {
+            showToast('发现安全漏洞', 'error');
+        } else {
+            showToast('扫描完成，无漏洞', 'success');
+        }
+        markCacheDirty('config');
+        tabCache.config.data = output.textContent;
+        tabCache.config.timestamp = Date.now();
+    } catch (err) {
+        output.textContent = '扫描失败: ' + err.message;
+        showToast('扫描失败', 'error');
+    }
+    btn.disabled = false;
+    btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </svg> 扫描漏洞`;
+}
+
+// ===== Pin / Unpin =====
+window.pinPackage = pinPackage;
+async function pinPackage(name) {
+    try {
+        await Service.Pin(name);
+        showToast(`${name} 已锁定`, 'success');
+    } catch (err) {
+        showToast('锁定失败: ' + err.message, 'error');
+    }
+}
+
+window.unpinPackage = unpinPackage;
+async function unpinPackage(name) {
+    try {
+        await Service.Unpin(name);
+        showToast(`${name} 已解锁`, 'success');
+    } catch (err) {
+        showToast('解锁失败: ' + err.message, 'error');
+    }
+}
+
+// ===== Link / Unlink =====
+window.linkPackage = linkPackage;
+async function linkPackage(name) {
+    try {
+        await Service.Link(name);
+        showToast(`${name} 已链接`, 'success');
+    } catch (err) {
+        showToast('链接失败: ' + err.message, 'error');
+    }
+}
+
+window.unlinkPackage = unlinkPackage;
+async function unlinkPackage(name) {
+    try {
+        await Service.Unlink(name);
+        showToast(`${name} 已取消链接`, 'success');
+    } catch (err) {
+        showToast('取消链接失败: ' + err.message, 'error');
+    }
+}
+
+// ===== Leaves =====
+window.loadLeaves = loadLeaves;
+async function loadLeaves() {
+    const container = document.getElementById('leaves-list');
+    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 加载中...</div>';
+    try {
+        const leaves = await Service.GetLeaves();
+        if (!leaves || leaves.length === 0) {
+            container.innerHTML = '<p class="empty-state">暂无孤立依赖信息</p>';
+            return;
+        }
+        container.innerHTML = leaves.map(name => `
+            <div class="dependency-item">
+                <span class="dep-name">${escapeHtml(name)}</span>
+                <span class="dep-status installed">顶层包</span>
+            </div>
+        `).join('');
+    } catch (err) {
+        container.innerHTML = `<p class="empty-state">加载失败: ${err.message}</p>`;
+    }
+}
+
+// ===== Missing =====
+window.loadMissing = loadMissing;
+async function loadMissing() {
+    const container = document.getElementById('missing-list');
+    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 检查中...</div>';
+    try {
+        const missing = await Service.GetMissing();
+        if (!missing || missing.length === 0) {
+            container.innerHTML = '<p class="empty-state">✓ 所有依赖都已满足</p>';
+            return;
+        }
+        container.innerHTML = missing.map(name => `
+            <div class="dependency-item">
+                <span class="dep-name">${escapeHtml(name)}</span>
+                <span class="dep-status" style="color:var(--warning);background:var(--warning-dim);">缺失依赖</span>
+            </div>
+        `).join('');
+    } catch (err) {
+        container.innerHTML = `<p class="empty-state">检查失败: ${err.message}</p>`;
+    }
+}
+
+// ===== Uses (reverse dependencies) =====
+window.loadUses = loadUses;
+async function loadUses() {
+    const input = document.getElementById('uses-search-input');
+    const name = input.value.trim();
+    if (!name) {
+        document.getElementById('uses-results').innerHTML = '<p class="empty-state">请输入包名</p>';
+        return;
+    }
+
+    const container = document.getElementById('uses-results');
+    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 查询中...</div>';
+
+    try {
+        const uses = await Service.GetUses(name);
+        if (!uses || uses.length === 0) {
+            container.innerHTML = `<p class="empty-state">没有已安装的包依赖 <strong>${escapeHtml(name)}</strong></p>`;
+            return;
+        }
+        container.innerHTML = uses.map(dep => `
+            <div class="dependency-item">
+                <span class="dep-name">${escapeHtml(dep)}</span>
+                <span class="dep-status installed">依赖 ${escapeHtml(name)}</span>
+            </div>
+        `).join('');
+    } catch (err) {
+        container.innerHTML = `<p class="empty-state">查询失败: ${err.message}</p>`;
+    }
+}
+
 // ===== Init =====
 (async () => {
     try {
-        const version = await window.go.main.App.Version();
+        const version = await Service.GetVersion();
         document.getElementById('brew-version').textContent = version;
     } catch (err) {
         document.getElementById('brew-version').textContent = 'Brew 未安装';

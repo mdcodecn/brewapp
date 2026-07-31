@@ -121,9 +121,21 @@ func (s *Service) parseVersionsLine(line, pkgType string) BrewPackage {
 
 // GetPackageInfo returns detailed info for a single package (description + version)
 func (s *Service) GetPackageInfo(name, pkgType string) (BrewPackage, error) {
-	jsonOutput, err := s.runBrew("info", "--json", name)
+	// First check if the package is installed
+	installed := false
+	listOut, err := s.runBrew("list", name)
+	if err == nil && strings.TrimSpace(listOut) == name {
+		installed = true
+	}
+
+	jsonOutput, err := s.runBrew("info", "--json=v2", name)
 	if err != nil {
-		return BrewPackage{Name: name, Type: pkgType}, err
+		// Try v1 format as fallback
+		jsonOutput, err2 := s.runBrew("info", "--json", name)
+		if err2 != nil {
+			return BrewPackage{Name: name, Type: pkgType, Installed: installed}, err
+		}
+		jsonOutput = jsonOutput
 	}
 
 	var info []struct {
@@ -134,10 +146,10 @@ func (s *Service) GetPackageInfo(name, pkgType string) (BrewPackage, error) {
 		} `json:"versions"`
 	}
 	if err := json.Unmarshal([]byte(jsonOutput), &info); err != nil {
-		return BrewPackage{Name: name, Type: pkgType}, err
+		return BrewPackage{Name: name, Type: pkgType, Installed: installed}, err
 	}
 
-	pkg := BrewPackage{Name: name, Type: pkgType}
+	pkg := BrewPackage{Name: name, Type: pkgType, Installed: installed}
 	if len(info) > 0 {
 		pkg.Description = info[0].Desc
 		pkg.Version = info[0].Versions.Stable
@@ -289,6 +301,13 @@ func (s *Service) GetOutdated() ([]BrewPackage, error) {
 		return []BrewPackage{}, nil
 	}
 
+	// Pre-load cask list for type detection
+	caskList, _ := s.runBrew("list", "--cask")
+	caskSet := make(map[string]bool)
+	for _, caskLine := range strings.Split(strings.TrimSpace(caskList), "\n") {
+		caskSet[strings.TrimSpace(caskLine)] = true
+	}
+
 	packages := make([]BrewPackage, 0)
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
@@ -307,8 +326,7 @@ func (s *Service) GetOutdated() ([]BrewPackage, error) {
 			}
 
 			// Detect cask vs formula
-			caskOut, _ := s.runBrew("list", "--cask", parts[0])
-			if strings.TrimSpace(caskOut) == parts[0] {
+			if caskSet[parts[0]] {
 				pkg.Type = "cask"
 			} else {
 				pkg.Type = "formula"
@@ -532,7 +550,7 @@ func (s *Service) RemoveTap(tap string) error {
 
 // GetPackageInstallTime returns the installation time of a package
 func (s *Service) GetPackageInstallTime(name string) (string, error) {
-	// Try to get from brew info
+	// Try to get from brew info --json=v2
 	jsonOutput, err := s.runBrew("info", "--json=v2", name)
 	if err != nil {
 		return "", err
@@ -547,9 +565,133 @@ func (s *Service) GetPackageInstallTime(name string) (string, error) {
 	}
 
 	if len(info) > 0 {
+		// Try to get install time from installed_once_ever array
+		if len(info[0].InstalledOnce) > 0 {
+			return info[0].InstalledOnce[0], nil
+		}
 		return info[0].Name, nil
 	}
 	return "", nil
+}
+
+// Update runs brew update
+func (s *Service) Update() error {
+	_, err := s.runBrew("update")
+	if err != nil {
+		return fmt.Errorf("failed to update: %w", err)
+	}
+	return nil
+}
+
+// Doctor runs brew doctor and returns output
+func (s *Service) Doctor() (string, error) {
+	output, err := s.runBrew("doctor")
+	if err != nil {
+		return output, nil // doctor returns non-zero on warnings
+	}
+	return output, nil
+}
+
+// Config returns brew config output
+func (s *Service) Config() (string, error) {
+	output, err := s.runBrew("config")
+	if err != nil {
+		return "", fmt.Errorf("failed to get config: %w", err)
+	}
+	return output, nil
+}
+
+// GetLeaves returns top-level (non-dependency) packages
+func (s *Service) GetLeaves() ([]string, error) {
+	output, err := s.runBrew("leaves")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get leaves: %w", err)
+	}
+	var leaves []string
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			leaves = append(leaves, line)
+		}
+	}
+	return leaves, nil
+}
+
+// GetMissing returns packages with missing dependencies
+func (s *Service) GetMissing() ([]string, error) {
+	output, err := s.runBrew("missing")
+	if err != nil {
+		return []string{}, nil
+	}
+	var missing []string
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			missing = append(missing, line)
+		}
+	}
+	return missing, nil
+}
+
+// GetUses returns packages that depend on the given package
+func (s *Service) GetUses(name string) ([]string, error) {
+	output, err := s.runBrew("uses", "--installed", name)
+	if err != nil {
+		return []string{}, nil
+	}
+	var uses []string
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			uses = append(uses, line)
+		}
+	}
+	return uses, nil
+}
+
+// Pin pins a package to prevent upgrades
+func (s *Service) Pin(name string) error {
+	_, err := s.runBrew("pin", name)
+	if err != nil {
+		return fmt.Errorf("failed to pin %s: %w", name, err)
+	}
+	return nil
+}
+
+// Unpin unpins a package
+func (s *Service) Unpin(name string) error {
+	_, err := s.runBrew("unpin", name)
+	if err != nil {
+		return fmt.Errorf("failed to unpin %s: %w", name, err)
+	}
+	return nil
+}
+
+// Link links a package
+func (s *Service) Link(name string) error {
+	_, err := s.runBrew("link", name)
+	if err != nil {
+		return fmt.Errorf("failed to link %s: %w", name, err)
+	}
+	return nil
+}
+
+// Unlink unlinks a package
+func (s *Service) Unlink(name string) error {
+	_, err := s.runBrew("unlink", name)
+	if err != nil {
+		return fmt.Errorf("failed to unlink %s: %w", name, err)
+	}
+	return nil
+}
+
+// GetVulns returns known vulnerabilities
+func (s *Service) GetVulns() (string, error) {
+	output, err := s.runBrew("vulns")
+	if err != nil {
+		return output, nil
+	}
+	return output, nil
 }
 
 // GetOutdatedWithVersion returns outdated packages with current and latest versions
@@ -574,9 +716,13 @@ func (s *Service) GetOutdatedWithVersion() ([]BrewPackage, error) {
 				Outdated:    true,
 				Type:        "formula",
 			}
-			// Check if it's a cask
-			if _, err := s.runBrew("list", "--cask", parts[0]); err == nil {
-				pkg.Type = "cask"
+			// Check if it's a cask by checking list --cask output
+			caskOut, _ := s.runBrew("list", "--cask")
+			for _, caskLine := range strings.Split(strings.TrimSpace(caskOut), "\n") {
+				if strings.TrimSpace(caskLine) == parts[0] {
+					pkg.Type = "cask"
+					break
+				}
 			}
 			packages = append(packages, pkg)
 		}
