@@ -62,6 +62,10 @@ export function ListInstalled() {
   return window['go']['main']['Service']['ListInstalled']();
 }
 
+export function Reinstall(arg1, arg2) {
+  return window['go']['main']['Service']['Reinstall'](arg1, arg2);
+}
+
 export function RemoveTap(arg1) {
   return window['go']['main']['Service']['RemoveTap'](arg1);
 }

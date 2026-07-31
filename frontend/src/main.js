@@ -79,7 +79,7 @@ function showDetailModal(pkg) {
     const actionBtn = document.getElementById('detail-modal-action');
     actionBtn.style.display = 'none';
 
-    body.innerHTML = '<div class="spinner" style="margin:20px auto;"></div>';
+    body.innerHTML = '<div class="loading-state"><span class="spinner"></span> 加载详情...</div>';
     document.getElementById('detail-modal-overlay').style.display = 'flex';
 
     // Load full package info
@@ -128,8 +128,18 @@ function renderDetailModal(info) {
             html += `<div style="margin-top:16px;color:var(--text-secondary);font-size:13px;">暂无依赖信息</div>`;
         }
 
-        // Set action button based on installed status
+        // Set action buttons based on installed status
         if (info.installed) {
+            // Add reinstall button before the action button
+            const reinstallBtn = document.createElement('button');
+            reinstallBtn.textContent = '重装';
+            reinstallBtn.className = 'btn btn-secondary';
+            reinstallBtn.onclick = () => {
+                closeDetailModal();
+                reinstallPackage(info.name, info.type);
+            };
+            actionBtn.parentNode.insertBefore(reinstallBtn, actionBtn);
+
             actionBtn.textContent = '卸载';
             actionBtn.className = 'btn btn-danger';
             actionBtn.style.display = 'inline-flex';
@@ -272,8 +282,24 @@ function renderDashboard(data) {
 
     // Stats - immediate
     document.getElementById('stat-total').textContent = packages.length;
+    document.getElementById('stat-total').classList.remove('skeleton-text');
     document.getElementById('stat-casks').textContent = casks.length;
+    document.getElementById('stat-casks').classList.remove('skeleton-text');
     document.getElementById('stat-outdated').textContent = outdated.length;
+    document.getElementById('stat-outdated').classList.remove('skeleton-text');
+
+    // Sidebar badges
+    const totalBadge = document.getElementById('dashboard-badge');
+    totalBadge.style.display = packages.length > 0 ? 'inline' : 'none';
+    totalBadge.textContent = packages.length;
+
+    const caskBadge = document.getElementById('cask-badge');
+    caskBadge.style.display = casks.length > 0 ? 'inline' : 'none';
+    caskBadge.textContent = casks.length;
+
+    const formulaBadge = document.getElementById('formula-badge');
+    formulaBadge.style.display = formulas.length > 0 ? 'inline' : 'none';
+    formulaBadge.textContent = formulas.length;
 
     // Outdated badge
     const badge = document.getElementById('outdated-badge');
@@ -334,7 +360,19 @@ function renderInstalled(type, packages) {
 
     const container = document.getElementById(containerId);
     if (filtered.length === 0) {
-        container.innerHTML = '<p class="empty-state">暂无数据</p>';
+        if (packages.length === 0) {
+            // Still loading — show skeletons
+            container.innerHTML = Array.from({length: 5}, () => `
+                <div class="skeleton-row">
+                    <div class="skeleton sk-name"></div>
+                    <div class="skeleton sk-version"></div>
+                    <div class="skeleton sk-desc"></div>
+                    <div class="skeleton sk-badge"></div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<p class="empty-state">暂无数据</p>';
+        }
         return;
     }
     container.innerHTML = filtered.map(p => `
@@ -344,6 +382,7 @@ function renderInstalled(type, packages) {
             <span class="pkg-desc">${escapeHtml(p.description || '-')}</span>
             <div class="pkg-actions">
                 <button class="btn btn-secondary btn-sm" onclick="showDetailModal(installedPackages.find(x => x.name === '${escapeHtml(p.name)}' && x))">详情</button>
+                <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${type}')">重装</button>
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${type}')">卸载</button>
             </div>
         </div>
@@ -352,6 +391,30 @@ function renderInstalled(type, packages) {
 
 function filterInstalled(type) {
     renderInstalled(type, installedPackages);
+}
+
+async function reinstallPackage(name, type) {
+    showModal(
+        '确认重装',
+        `确定要重装 <strong>${escapeHtml(name)}</strong> 吗？这将重新下载并安装该包。`,
+        async () => {
+            try {
+                await window.go.main.Service.Reinstall(name, type);
+                showToast(`${name} 重装成功`, 'success');
+                addRecentAction('reinstall', name);
+                // Reload after a short delay
+                setTimeout(() => {
+                    markCacheDirty('installed');
+                    tabCache.installed.data = null;
+                    tabCache.installed.timestamp = 0;
+                    installedPackages = [];
+                    loadInstalled();
+                }, 500);
+            } catch (err) {
+                showToast('重装失败: ' + err.message, 'error');
+            }
+        }
+    );
 }
 
 async function uninstallPackage(name, type) {
@@ -394,7 +457,7 @@ async function doSearch(query) {
         return;
     }
 
-    container.innerHTML = '<p class="empty-state"><span class="spinner"></span> 搜索中...</p>';
+    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 搜索中...</div>';
 
     try {
         const results = await window.go.main.Service.Search(query);
@@ -658,7 +721,7 @@ async function loadDependencies() {
     }
 
     const container = document.getElementById('dependency-results');
-    container.innerHTML = '<p class="empty-state"><span class="spinner"></span> 查询中...</p>';
+    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 查询中...</div>';
 
     try {
         const deps = await window.go.main.Service.GetDependencies(name);
@@ -831,8 +894,8 @@ function loadRecentActions() {
         return;
     }
 
-    const icons = { install: '📦', uninstall: '🗑️', upgrade: '⬆️' };
-    const labels = { install: '安装', uninstall: '卸载', upgrade: '更新' };
+    const icons = { install: '📦', uninstall: '🗑️', upgrade: '⬆️', reinstall: '🔄' };
+    const labels = { install: '安装', uninstall: '卸载', upgrade: '更新', reinstall: '重装' };
 
     container.innerHTML = actions.slice(0, 10).map(a => {
         const time = new Date(a.time);

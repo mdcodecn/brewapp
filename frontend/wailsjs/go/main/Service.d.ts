@@ -32,6 +32,8 @@ export function Install(arg1:string,arg2:string):Promise<void>;
 
 export function ListInstalled():Promise<Array<main.BrewPackage>>;
 
+export function Reinstall(arg1:string,arg2:string):Promise<void>;
+
 export function RemoveTap(arg1:string):Promise<void>;
 
 export function Search(arg1:string):Promise<Array<main.BrewSearchResult>>;

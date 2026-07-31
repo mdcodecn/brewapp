@@ -248,6 +248,20 @@ func (s *Service) Uninstall(name, pkgType string) error {
 	return nil
 }
 
+// Reinstall reinstalls a package
+func (s *Service) Reinstall(name, pkgType string) error {
+	args := []string{"reinstall"}
+	if pkgType == "cask" {
+		args = append(args, "--cask")
+	}
+	args = append(args, name)
+	_, err := s.runBrew(args...)
+	if err != nil {
+		return fmt.Errorf("failed to reinstall %s: %w", name, err)
+	}
+	return nil
+}
+
 // Upgrade upgrades all packages or a specific one
 func (s *Service) Upgrade(name ...string) error {
 	args := []string{"upgrade", "--verbose"}
