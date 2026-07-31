@@ -1,11 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strings"
 )
 
@@ -150,48 +148,75 @@ func (s *Service) Search(query string) ([]BrewSearchResult, error) {
 		return nil, nil
 	}
 
-	output, err := s.runBrew("search", query)
+	// First get installed package names for quick lookup
+	installedOutput, _ := s.runBrew("list")
+	installedCaskOutput, _ := s.runBrew("list", "--cask")
+	installedSet := make(map[string]bool)
+	for _, line := range strings.Split(strings.TrimSpace(installedOutput), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			installedSet[line] = true
+		}
+	}
+	for _, line := range strings.Split(strings.TrimSpace(installedCaskOutput), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			installedSet[line] = true
+		}
+	}
+
+	// Search formulas
+	formulaResults, _ := s.searchFormulae(query, installedSet)
+	// Search casks
+	caskResults, _ := s.searchCasks(query, installedSet)
+
+	return append(formulaResults, caskResults...), nil
+}
+
+// searchFormulae searches for formulae matching the query
+func (s *Service) searchFormulae(query string, installedSet map[string]bool) ([]BrewSearchResult, error) {
+	output, err := s.runBrew("search", "--formulae", query)
 	if err != nil {
-		return nil, fmt.Errorf("failed to search: %w", err)
+		return nil, fmt.Errorf("failed to search formulae: %w", err)
 	}
 
 	results := make([]BrewSearchResult, 0)
-	scanner := bufio.NewScanner(strings.NewReader(output))
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "==>") {
 			continue
 		}
 
-		result := BrewSearchResult{}
-		// Format: name@version (type) - description
-		re := regexp.MustCompile(`^([a-zA-Z0-9][a-zA-Z0-9._+-]*)@?([a-zA-Z0-9._+-]*)\s+\(([cf])\)\s*[-–]\s*(.*)$`)
-		matches := re.FindStringSubmatch(line)
-		if matches != nil {
-			result.Name = matches[1]
-			if len(matches) > 2 && matches[2] != "" {
-				result.Version = matches[2]
-			}
-			switch matches[3] {
-			case "c":
-				result.Type = "cask"
-			case "f":
-				result.Type = "formula"
-			}
-			if len(matches) > 4 {
-				result.Description = strings.TrimSpace(matches[4])
-			}
-		} else {
-			result.Name = line
-			result.Type = "formula"
+		result := BrewSearchResult{
+			Name:      line,
+			Type:      "formula",
+			Installed: installedSet[line],
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+// searchCasks searches for casks matching the query
+func (s *Service) searchCasks(query string, installedSet map[string]bool) ([]BrewSearchResult, error) {
+	output, err := s.runBrew("search", "--casks", query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search casks: %w", err)
+	}
+
+	results := make([]BrewSearchResult, 0)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "==>") {
+			continue
 		}
 
-		// Check if installed
-		if _, err := s.runBrew("list", result.Name); err == nil {
-			result.Installed = true
+		result := BrewSearchResult{
+			Name:      line,
+			Type:      "cask",
+			Installed: installedSet[line],
 		}
-
 		results = append(results, result)
 	}
 
@@ -256,10 +281,17 @@ func (s *Service) GetOutdated() ([]BrewPackage, error) {
 			pkg := BrewPackage{
 				Name:     parts[0],
 				Outdated: true,
-				Type:     "formula",
 			}
 			if len(parts) >= 3 {
 				pkg.Version = parts[2] // current version
+			}
+
+			// Detect cask vs formula
+			caskOut, _ := s.runBrew("list", "--cask", parts[0])
+			if strings.TrimSpace(caskOut) == parts[0] {
+				pkg.Type = "cask"
+			} else {
+				pkg.Type = "formula"
 			}
 
 			packages = append(packages, pkg)
