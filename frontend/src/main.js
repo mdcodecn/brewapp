@@ -1,7 +1,6 @@
 // ===== Wails Bindings =====
 import * as App from '../wailsjs/go/main/App';
 import * as Service from '../wailsjs/go/main/Service';
-import * as runtime from '../wailsjs/runtime/runtime.js';
 
 // ===== Tab Navigation with Slide Transition =====
 let currentTab = 'dashboard';
@@ -262,39 +261,55 @@ function markCacheDirty(tab) {
 window.refreshDashboard = refreshDashboard;
 async function refreshDashboard() {
     const btn = document.querySelector('#tab-dashboard .page-header .btn-primary');
+
     // If cache is valid, render immediately from cache
     if (isCacheValid(tabCache.dashboard)) {
         setButtonLoading(btn, true, '刷新');
         renderDashboard(tabCache.dashboard.data);
-        // Still refresh in background
-        refreshDashboardInBackground().then(() => setButtonLoading(btn, false, '刷新'));
+        // Still refresh disk usage and outdated in background
+        Promise.allSettled([
+            Service.GetDiskUsage().then(diskUsage => {
+                if (currentTab === 'dashboard' && tabCache.dashboard.data) {
+                    tabCache.dashboard.data.diskUsage = diskUsage;
+                    renderDashboard(tabCache.dashboard.data);
+                }
+            }).catch(() => {}),
+            refreshDashboardInBackground(),
+        ]).finally(() => setButtonLoading(btn, false, '刷新'));
         return;
     }
 
-    try {
-        setButtonLoading(btn, true, '刷新');
-        // Quick: ListInstalled + GetDiskUsage (local, fast)
-        const [packages, diskUsage] = await Promise.all([
-            Service.ListInstalled(),
-            Service.GetDiskUsage(),
-        ]);
-        const quickData = { packages, diskUsage, outdated: [] };
-        tabCache.dashboard.data = quickData;
-        tabCache.dashboard.timestamp = Date.now();
-        renderDashboard(quickData);
+    // Always render immediately with pre-loaded data (zero wait)
+    setButtonLoading(btn, true, '刷新');
+    const quickData = { packages: installedPackages, diskUsage: {}, outdated: [], _outdatedLoaded: false };
+    tabCache.dashboard.data = quickData;
+    tabCache.dashboard.timestamp = Date.now();
+    renderDashboard(quickData);
 
-        // Slow: GetOutdated (may need network, do in background)
-        refreshDashboardInBackground().catch(() => {}).finally(() => setButtonLoading(btn, false, '刷新'));
-    } catch (err) {
-        showToast('加载失败: ' + err.message, 'error');
-        setButtonLoading(btn, false, '刷新');
-    }
+    // Fetch everything in background (don't block initial render)
+    Promise.allSettled([
+        Service.ListInstalled().then(packages => {
+            if (currentTab === 'dashboard' && tabCache.dashboard.data) {
+                tabCache.dashboard.data.packages = packages;
+                installedPackages = packages;
+                renderDashboard(tabCache.dashboard.data);
+            }
+        }).catch(() => {}),
+        Service.GetDiskUsage().then(diskUsage => {
+            if (currentTab === 'dashboard' && tabCache.dashboard.data) {
+                tabCache.dashboard.data.diskUsage = diskUsage;
+                renderDashboard(tabCache.dashboard.data);
+            }
+        }).catch(() => {}),
+        refreshDashboardInBackground(),
+    ]).finally(() => setButtonLoading(btn, false, '刷新'));
 }
 
 async function refreshDashboardInBackground() {
     try {
         const outdated = await Service.GetOutdated();
         tabCache.dashboard.data.outdated = outdated;
+        tabCache.dashboard.data._outdatedLoaded = true;
         tabCache.dashboard.timestamp = Date.now();
         // Only re-render if still on dashboard tab
         if (currentTab === 'dashboard') {
@@ -319,28 +334,14 @@ function renderDashboard(data) {
     const { packages, outdated, diskUsage } = data;
 
     const casks = packages.filter(p => p.type === 'cask');
-    const formulas = packages.filter(p => p.type === 'formula');
 
-    // Stats - immediate
+    // Stats - always render immediately
     document.getElementById('stat-total').textContent = packages.length;
     document.getElementById('stat-total').classList.remove('skeleton-text');
     document.getElementById('stat-casks').textContent = casks.length;
     document.getElementById('stat-casks').classList.remove('skeleton-text');
     document.getElementById('stat-outdated').textContent = outdated.length;
     document.getElementById('stat-outdated').classList.remove('skeleton-text');
-
-    // Sidebar badges
-    const totalBadge = document.getElementById('dashboard-badge');
-    totalBadge.style.display = packages.length > 0 ? 'inline' : 'none';
-    totalBadge.textContent = packages.length;
-
-    const caskBadge = document.getElementById('cask-badge');
-    caskBadge.style.display = casks.length > 0 ? 'inline' : 'none';
-    caskBadge.textContent = casks.length;
-
-    const formulaBadge = document.getElementById('formula-badge');
-    formulaBadge.style.display = formulas.length > 0 ? 'inline' : 'none';
-    formulaBadge.textContent = formulas.length;
 
     // Outdated badge
     const badge = document.getElementById('outdated-badge');
@@ -351,7 +352,24 @@ function renderDashboard(data) {
         badge.style.display = 'none';
     }
 
-    // Disk usage - immediate
+    // Sidebar badges for cask and formula counts
+    const caskBadge = document.getElementById('cask-count-badge');
+    const formulaBadge = document.getElementById('formula-count-badge');
+    if (casks.length > 0) {
+        caskBadge.style.display = 'inline';
+        caskBadge.textContent = casks.length;
+    } else {
+        caskBadge.style.display = 'none';
+    }
+    const formulas = packages.filter(p => p.type === 'formula');
+    if (formulas.length > 0) {
+        formulaBadge.style.display = 'inline';
+        formulaBadge.textContent = formulas.length;
+    } else {
+        formulaBadge.style.display = 'none';
+    }
+
+    // Disk usage - render immediately (empty if no data yet)
     const diskGrid = document.getElementById('disk-usage-grid');
     diskGrid.innerHTML = '';
     for (const [label, value] of Object.entries(diskUsage)) {
@@ -361,9 +379,6 @@ function renderDashboard(data) {
                 <span class="value">${escapeHtml(value)}</span>
             </div>`;
     }
-
-    // Recent actions - async, don't block the initial render
-    loadRecentActions();
 }
 
 // ===== Installed =====
@@ -449,7 +464,6 @@ async function reinstallPackage(name, type) {
             try {
                 await Service.Reinstall(name, type);
                 showToast(`${name} 重装成功`, 'success');
-                addRecentAction('reinstall', name);
                 // Reload after a short delay
                 setTimeout(() => {
                     markCacheDirty('installed');
@@ -484,7 +498,6 @@ async function uninstallPackage(name, type) {
                 tabCache.dashboard.timestamp = 0;
                 installedPackages = [];
                 loadInstalled(currentTab);
-                addRecentAction('uninstall', name);
             } catch (err) {
                 showToast('卸载失败: ' + err.message, 'error');
             }
@@ -494,47 +507,80 @@ async function uninstallPackage(name, type) {
     );
 }
 
-// ===== Search =====
+// ===== Topbar Search =====
 let searchTimeout = null;
 
-window.debounceSearch = debounceSearch;
-function debounceSearch() {
-    clearTimeout(searchTimeout);
-    const input = document.getElementById('search-input');
-    searchTimeout = setTimeout(() => doSearch(input.value), 300);
+function closeTopbarSearch() {
+    const dropdown = document.getElementById('topbar-search-dropdown');
+    if (dropdown) dropdown.style.display = 'none';
+    const input = document.getElementById('topbar-search-input');
+    if (input) input.blur();
 }
 
-window.doSearch = doSearch;
-async function doSearch(query) {
-    const container = document.getElementById('search-results');
-    if (!query || query.trim() === '') {
-        container.innerHTML = '<p class="empty-state">输入关键词搜索 Homebrew 包</p>';
+function renderTopbarSearchResults(results) {
+    const dropdown = document.getElementById('topbar-search-dropdown');
+    if (!dropdown) return;
+
+    if (!results || results.length === 0) {
+        dropdown.innerHTML = '<div class="empty-state">未找到匹配的结果</div>';
         return;
     }
 
-    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 搜索中...</div>';
+    dropdown.innerHTML = results.slice(0, 12).map(r => `
+        <div class="search-result-item" onclick="topbarInstallPackage('${escapeHtml(r.name)}', '${r.type}')">
+            <span class="result-name">${escapeHtml(r.name)}</span>
+            <span class="result-type ${r.type}">${r.type === 'cask' ? '应用' : '公式'}</span>
+            ${r.installed ? '<span style="font-size:11px;color:var(--success);">✓ 已安装</span>' : ''}
+            <span class="result-desc">${escapeHtml(r.description || '')}</span>
+        </div>
+    `).join('');
+}
+
+window.topbarInstallPackage = async function(name, type) {
+    closeTopbarSearch();
+    showModalLoading(
+        '确认安装',
+        `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？`,
+        async (confirmBtn) => {
+            try {
+                await Service.Install(name, type);
+                showToast(`${name} 安装成功`, 'success');
+                markCacheDirty('installed');
+                markCacheDirty('dashboard');
+                tabCache.installed.data = null;
+                tabCache.installed.timestamp = 0;
+                tabCache.dashboard.data = null;
+                tabCache.dashboard.timestamp = 0;
+                installedPackages = [];
+            } catch (err) {
+                showToast('安装失败: ' + err.message, 'error');
+            }
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '确认';
+        }
+    );
+};
+
+async function topbarDoSearch(query) {
+    const dropdown = document.getElementById('topbar-search-dropdown');
+    if (!dropdown) return;
+    dropdown.style.display = 'block';
+    dropdown.innerHTML = '<div class="loading-state" style="padding:12px;"><span class="spinner"></span> 搜索中...</div>';
 
     try {
         const results = await Service.Search(query);
-        if (!results || results.length === 0) {
-            container.innerHTML = '<p class="empty-state">未找到匹配的结果</p>';
-            return;
-        }
-
-        container.innerHTML = results.map(r => `
-            <div class="result-item">
-                <span class="result-name">${escapeHtml(r.name)}</span>
-                <span class="type-badge ${r.type}">${r.type === 'cask' ? '应用' : '公式'}</span>
-                ${r.installed ? '<span class="installed-tag">✓ 已安装</span>' : ''}
-                <div class="result-actions">
-                    ${!r.installed ? `<button class="btn btn-primary btn-sm" onclick="installPackage('${escapeHtml(r.name)}', '${r.type}')">安装</button>` : ''}
-                </div>
-            </div>
-        `).join('');
+        renderTopbarSearchResults(results);
     } catch (err) {
-        container.innerHTML = `<p class="empty-state">搜索失败: ${err.message}</p>`;
+        dropdown.innerHTML = `<div class="empty-state">搜索失败: ${err.message}</div>`;
     }
 }
+
+window.topbarDebounceSearch = function() {
+    clearTimeout(searchTimeout);
+    const input = document.getElementById('topbar-search-input');
+    if (!input) return;
+    searchTimeout = setTimeout(() => topbarDoSearch(input.value), 300);
+};
 
 window.installPackage = installPackage;
 async function installPackage(name, type) {
@@ -553,8 +599,6 @@ async function installPackage(name, type) {
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
                 installedPackages = [];
-                addRecentAction('install', name);
-                doSearch(document.getElementById('search-input').value);
             } catch (err) {
                 showToast('安装失败: ' + err.message, 'error');
             }
@@ -643,7 +687,6 @@ async function upgradePackage(name) {
         tabCache.outdated.timestamp = 0;
         tabCache.dashboard.data = null;
         tabCache.dashboard.timestamp = 0;
-        addRecentAction('upgrade', name);
         loadOutdated();
     } catch (err) {
         showToast('更新失败: ' + err.message, 'error');
@@ -669,7 +712,6 @@ async function upgradeAll() {
                 tabCache.outdated.timestamp = 0;
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
-                addRecentAction('upgrade', 'all packages');
                 loadOutdated();
             } catch (err) {
                 showToast('更新失败: ' + err.message, 'error');
@@ -718,92 +760,6 @@ async function cleanupBrew() {
                 showToast('清理失败: ' + err.message, 'error');
             }
             setButtonLoading(btn, false, '清理缓存');
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '确认';
-        }
-    );
-}
-
-// ===== Dependency Management =====
-window.loadDependencies = loadDependencies;
-async function loadDependencies() {
-    const input = document.getElementById('dep-search-input');
-    const name = input.value.trim();
-    if (!name) {
-        document.getElementById('dependency-results').innerHTML = '<p class="empty-state">请输入包名</p>';
-        return;
-    }
-    const btn = input.nextElementSibling;
-    setButtonLoading(btn, true, '查询');
-    const container = document.getElementById('dependency-results');
-    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 查询中...</div>';
-
-    try {
-        const deps = await Service.GetDependencies(name);
-        if (!deps || deps.length === 0) {
-            container.innerHTML = '<p class="empty-state">未找到依赖信息（该包可能没有依赖或不存在）</p>';
-            return;
-        }
-
-        const installedSet = new Set(installedPackages.map(p => p.name));
-
-        container.innerHTML = deps.map(dep => {
-            const isInstalled = installedSet.has(dep);
-            return `
-                <div class="dependency-item">
-                    <span class="dep-name">${escapeHtml(dep)}</span>
-                    <span class="dep-status ${isInstalled ? 'installed' : ''}">${isInstalled ? '✓ 已安装' : '未安装'}</span>
-                </div>`;
-        }).join('');
-    } catch (err) {
-        container.innerHTML = `<p class="empty-state">查询失败: ${err.message}</p>`;
-    }
-    setButtonLoading(btn, false, '查询');
-}
-
-// Allow Enter key to trigger dependency search
- document.addEventListener('DOMContentLoaded', () => {
-    const depInput = document.getElementById('dep-search-input');
-    if (depInput) {
-        depInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') loadDependencies();
-        });
-    }
-    const usesInput = document.getElementById('uses-search-input');
-    if (usesInput) {
-        usesInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') loadUses();
-        });
-    }
-});
-
-window.autoremoveDeps = autoremoveDeps;
-async function autoremoveDeps() {
-    const btn = document.querySelector('.dependency-section:last-child .btn-warning');
-    showModalLoading(
-        '清理孤立依赖',
-        '确定要清理不再被任何包依赖的孤立依赖吗？这将释放磁盘空间。',
-        async (confirmBtn) => {
-            const resultDiv = document.getElementById('autoremove-result');
-            resultDiv.className = 'autoremove-result';
-            resultDiv.style.display = 'block';
-            resultDiv.textContent = '正在清理...';
-            setButtonLoading(btn, true, '执行清理');
-            try {
-                await Service.Autoremove();
-                resultDiv.className = 'autoremove-result success';
-                resultDiv.textContent = '✓ 孤立依赖清理完成！';
-                showToast('清理完成', 'success');
-                markCacheDirty('dashboard');
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                refreshDashboard();
-            } catch (err) {
-                resultDiv.className = 'autoremove-result error';
-                resultDiv.textContent = '✗ 清理失败: ' + err.message;
-                showToast('清理失败: ' + err.message, 'error');
-            }
-            setButtonLoading(btn, false, '执行清理');
             confirmBtn.disabled = false;
             confirmBtn.innerHTML = '确认';
         }
@@ -899,49 +855,6 @@ async function removeTap(tap) {
     );
 }
 
-// ===== Recent Actions =====
-function getRecentActions() {
-    try {
-        return JSON.parse(localStorage.getItem('brew-actions') || '[]');
-    } catch { return []; }
-}
-
-function addRecentAction(type, name) {
-    const actions = getRecentActions();
-    actions.unshift({
-        type,
-        name,
-        time: new Date().toISOString()
-    });
-    if (actions.length > 20) actions.pop();
-    localStorage.setItem('brew-actions', JSON.stringify(actions));
-    loadRecentActions();
-}
-
-function loadRecentActions() {
-    const actions = getRecentActions();
-    const container = document.getElementById('recent-actions');
-
-    if (actions.length === 0) {
-        container.innerHTML = '<p class="empty-state">暂无操作记录</p>';
-        return;
-    }
-
-    const icons = { install: '📦', uninstall: '🗑️', upgrade: '⬆️', reinstall: '🔄' };
-    const labels = { install: '安装', uninstall: '卸载', upgrade: '更新', reinstall: '重装' };
-
-    container.innerHTML = actions.slice(0, 10).map(a => {
-        const time = new Date(a.time);
-        const timeStr = time.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        return `
-            <div class="action-item">
-                <span class="action-icon ${a.type}">${icons[a.type] || '•'}</span>
-                <span>${labels[a.type]} <strong>${escapeHtml(a.name)}</strong></span>
-                <span class="action-time">${timeStr}</span>
-            </div>`;
-    }).join('');
-}
-
 // ===== Utility =====
 function escapeHtml(str) {
     if (!str) return '';
@@ -986,11 +899,11 @@ window.showModalLoading = showModalLoading;
 
 // ===== Keyboard Shortcuts =====
 document.addEventListener('keydown', (e) => {
-    // Cmd/Ctrl + S = Search
+    // Cmd/Ctrl + S = Focus topbar search
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        switchTab('search');
-        setTimeout(() => document.getElementById('search-input').focus(), 100);
+        const input = document.getElementById('topbar-search-input');
+        if (input) input.focus();
     }
     // Cmd/Ctrl + R = Refresh Dashboard
     if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
@@ -1158,133 +1071,34 @@ async function unlinkPackage(name) {
     }
 }
 
-// ===== Leaves =====
-window.loadLeaves = loadLeaves;
-async function loadLeaves() {
-    const btn = document.querySelector('.dependency-section:nth-child(3) .btn-secondary');
-    setButtonLoading(btn, true, '加载顶层包');
-    const container = document.getElementById('leaves-list');
-    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 加载中...</div>';
-    try {
-        const leaves = await Service.GetLeaves();
-        if (!leaves || leaves.length === 0) {
-            container.innerHTML = '<p class="empty-state">暂无孤立依赖信息</p>';
-            return;
-        }
-        container.innerHTML = leaves.map(name => `
-            <div class="dependency-item">
-                <span class="dep-name">${escapeHtml(name)}</span>
-                <span class="dep-status installed">顶层包</span>
-            </div>
-        `).join('');
-    } catch (err) {
-        container.innerHTML = `<p class="empty-state">加载失败: ${err.message}</p>`;
-    }
-    setButtonLoading(btn, false, '加载顶层包');
-}
-
-// ===== Missing =====
-window.loadMissing = loadMissing;
-async function loadMissing() {
-    const btn = document.querySelector('.dependency-section:nth-child(4) .btn-secondary');
-    setButtonLoading(btn, true, '检查缺失依赖');
-    const container = document.getElementById('missing-list');
-    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 检查中...</div>';
-    try {
-        const missing = await Service.GetMissing();
-        if (!missing || missing.length === 0) {
-            container.innerHTML = '<p class="empty-state">✓ 所有依赖都已满足</p>';
-            return;
-        }
-        container.innerHTML = missing.map(name => `
-            <div class="dependency-item">
-                <span class="dep-name">${escapeHtml(name)}</span>
-                <span class="dep-status" style="color:var(--warning);background:var(--warning-dim);">缺失依赖</span>
-            </div>
-        `).join('');
-    } catch (err) {
-        container.innerHTML = `<p class="empty-state">检查失败: ${err.message}</p>`;
-    }
-    setButtonLoading(btn, false, '检查缺失依赖');
-}
-
-// ===== Uses (reverse dependencies) =====
-window.loadUses = loadUses;
-async function loadUses() {
-    const input = document.getElementById('uses-search-input');
-    const name = input.value.trim();
-    if (!name) {
-        document.getElementById('uses-results').innerHTML = '<p class="empty-state">请输入包名</p>';
-        return;
-    }
-    const btn = input.nextElementSibling;
-    setButtonLoading(btn, true, '查询');
-    const container = document.getElementById('uses-results');
-    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 查询中...</div>';
-
-    try {
-        const uses = await Service.GetUses(name);
-        if (!uses || uses.length === 0) {
-            container.innerHTML = `<p class="empty-state">没有已安装的包依赖 <strong>${escapeHtml(name)}</strong></p>`;
-            return;
-        }
-        container.innerHTML = uses.map(dep => `
-            <div class="dependency-item">
-                <span class="dep-name">${escapeHtml(dep)}</span>
-                <span class="dep-status installed">依赖 ${escapeHtml(name)}</span>
-            </div>
-        `).join('');
-    } catch (err) {
-        container.innerHTML = `<p class="empty-state">查询失败: ${err.message}</p>`;
-    }
-    setButtonLoading(btn, false, '查询');
-}
-
-// ===== Topbar Search Button =====
+// ===== Topbar Search =====
 document.addEventListener('DOMContentLoaded', () => {
-    // Topbar search button
-    const searchBtn = document.getElementById('topbar-search-btn');
-    if (searchBtn) {
-        searchBtn.addEventListener('click', () => {
-            switchTab('search');
-            setTimeout(() => {
-                const input = document.getElementById('search-input');
-                if (input) input.focus();
-            }, 100);
+    const searchInput = document.getElementById('topbar-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => window.topbarDebounceSearch());
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeTopbarSearch();
         });
     }
 
-    // Window controls
-    const btnMinimize = document.getElementById('btn-minimize');
-    if (btnMinimize) {
-        btnMinimize.addEventListener('click', () => {
-            runtime.WindowMinimise();
-        });
-    }
-
-    const btnMaximize = document.getElementById('btn-maximize');
-    if (btnMaximize) {
-        btnMaximize.addEventListener('click', () => {
-            runtime.WindowToggleMaximise();
-        });
-    }
-
-    const btnClose = document.getElementById('btn-close');
-    if (btnClose) {
-        btnClose.addEventListener('click', () => {
-            runtime.Quit();
-        });
-    }
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('topbar-search-dropdown');
+        const wrapper = document.querySelector('.topbar-search-wrapper');
+        if (dropdown && wrapper && !wrapper.contains(e.target)) {
+            closeTopbarSearch();
+        }
+    });
 });
 
 // ===== Init =====
 (async () => {
-    try {
-        const version = await Service.GetVersion();
+    // GetVersion is non-critical, don't block the dashboard render
+    Service.GetVersion().then(version => {
         document.getElementById('brew-version').textContent = version;
-    } catch (err) {
+    }).catch(() => {
         document.getElementById('brew-version').textContent = 'Brew 未安装';
-    }
+    });
     // Load dashboard immediately (first load, no cache)
     refreshDashboard();
 })();
