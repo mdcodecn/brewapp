@@ -1239,6 +1239,20 @@ async function loadUses() {
     setButtonLoading(btn, false, '查询');
 }
 
+// ===== Topbar Search Button =====
+document.addEventListener('DOMContentLoaded', () => {
+    const searchBtn = document.getElementById('topbar-search-btn');
+    if (searchBtn) {
+        searchBtn.addEventListener('click', () => {
+            switchTab('search');
+            setTimeout(() => {
+                const input = document.getElementById('search-input');
+                if (input) input.focus();
+            }, 100);
+        });
+    }
+});
+
 // ===== Init =====
 (async () => {
     try {

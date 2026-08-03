@@ -8,311 +8,312 @@
 </head>
 <body>
 <div id="app">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-        <div class="sidebar-header">
-            <svg class="logo" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-            </svg>
-            <span class="app-title">Brew Manager</span>
-        </div>
-        <nav class="sidebar-nav">
-            <button class="nav-item active" data-tab="dashboard">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                    <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-                </svg>
-                <span>概览</span>
-                <span class="badge" id="dashboard-badge" style="display:none;">0</span>
-            </button>
-            <button class="nav-item" data-tab="installed-cask">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-                </svg>
-                <span>应用容器</span>
-                <span class="badge" id="cask-badge" style="display:none;">0</span>
-            </button>
-            <button class="nav-item" data-tab="installed-formula">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-                </svg>
-                <span>命令行工具</span>
-                <span class="badge" id="formula-badge" style="display:none;">0</span>
-            </button>
-            <button class="nav-item" data-tab="search">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+    <!-- Top bar: fixed on macOS, normal flow on other platforms -->
+    <div class="app-topbar">
+        <span class="topbar-title">Brew Manager</span>
+        <div class="topbar-actions">
+            <button class="topbar-btn" id="topbar-search-btn" title="搜索 (⌘S)">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
                 </svg>
-                <span>搜索</span>
             </button>
-            <button class="nav-item" data-tab="outdated">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-                </svg>
-                <span>可更新</span>
-                <span class="badge badge-danger" id="outdated-badge" style="display:none;">0</span>
-            </button>
-            <button class="nav-item" data-tab="dependencies">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                    <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                    <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-                </svg>
-                <span>依赖</span>
-            </button>
-            <button class="nav-item" data-tab="taps">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                </svg>
-                <span>Taps 管理</span>
-            </button>
-            <button class="nav-item" data-tab="config">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-                <span>配置</span>
-            </button>
-
-        </nav>
-        <div class="sidebar-footer">
-            <div id="brew-version" class="brew-version">Loading...</div>
         </div>
-    </aside>
+    </div>
 
-    <!-- Main Content -->
-    <main class="main-content">
-        <!-- Dashboard -->
-        <div class="tab-content active" id="tab-dashboard">
-            <div class="page-header">
-                <h1>概览</h1>
-                <button class="btn btn-primary" onclick="refreshDashboard()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+    <div class="app-frame">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-tab="dashboard">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                        <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
                     </svg>
-                    刷新
+                    <span>概览</span>
+                    <span class="badge" id="dashboard-badge" style="display:none;">0</span>
                 </button>
-            </div>
-            <div class="stats-grid" id="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon stat-icon-blue">
-                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-                        </svg>
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value skeleton-text" id="stat-total">-</div>
-                        <div class="stat-label">已安装包</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon stat-icon-green">
-                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                            <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-                        </svg>
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value skeleton-text" id="stat-casks">-</div>
-                        <div class="stat-label">应用 (Cask)</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon stat-icon-orange">
-                        <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-                        </svg>
-                    </div>
-                    <div class="stat-info">
-                        <div class="stat-value skeleton-text" id="stat-outdated">-</div>
-                        <div class="stat-label">可更新</div>
-                    </div>
-                </div>
-            </div>
-            <div class="dashboard-section">
-                <h2>磁盘使用</h2>
-                <div class="disk-usage-grid" id="disk-usage-grid"></div>
-            </div>
-            <div class="dashboard-section">
-                <h2>数据管理</h2>
-                <div class="settings-actions">
-                    <button class="btn btn-secondary" onclick="exportConfig()">导出配置</button>
-                    <button class="btn btn-secondary" onclick="cleanupBrew()">清理缓存</button>
-                    <button class="btn btn-warning" onclick="autoremoveDeps()">清理孤立依赖</button>
-                </div>
-            </div>
-            <div class="dashboard-section">
-                <h2>最近操作</h2>
-                <div id="recent-actions" class="action-list">
-                    <p class="empty-state">暂无操作记录</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Installed Cask -->
-        <div class="tab-content" id="tab-installed-cask">
-            <div class="page-header">
-                <h1>应用容器</h1>
-                <input type="text" id="installed-cask-search" class="search-input" placeholder="搜索..." oninput="filterInstalled('cask')">
-            </div>
-            <div id="cask-list" class="pkg-list">
-                <div class="loading-state"><span class="spinner"></span> 加载中...</div>
-            </div>
-        </div>
-
-        <!-- Installed Formula -->
-        <div class="tab-content" id="tab-installed-formula">
-            <div class="page-header">
-                <h1>命令行工具</h1>
-                <input type="text" id="installed-formula-search" class="search-input" placeholder="搜索..." oninput="filterInstalled('formula')">
-            </div>
-            <div id="formula-list" class="pkg-list">
-                <div class="loading-state"><span class="spinner"></span> 加载中...</div>
-            </div>
-        </div>
-
-        <!-- Search -->
-        <div class="tab-content" id="tab-search">
-            <div class="page-header"><h1>搜索</h1></div>
-            <div class="search-box">
-                <input type="text" id="search-input" class="search-input search-input-lg" placeholder="搜索 Homebrew 公式或应用..." oninput="debounceSearch()">
-            </div>
-            <div id="search-results" class="results-list">
-                <p class="empty-state">输入关键词搜索 Homebrew 包</p>
-            </div>
-        </div>
-
-        <!-- Outdated -->
-        <div class="tab-content" id="tab-outdated">
-            <div class="page-header">
-                <h1>可更新</h1>
-                <button class="btn btn-primary" id="upgrade-all-btn" onclick="upgradeAll()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                <button class="nav-item" data-tab="installed-cask">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                    </svg>
+                    <span>应用容器</span>
+                    <span class="badge" id="cask-badge" style="display:none;">0</span>
+                </button>
+                <button class="nav-item" data-tab="installed-formula">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+                    </svg>
+                    <span>命令行工具</span>
+                    <span class="badge" id="formula-badge" style="display:none;">0</span>
+                </button>
+                <button class="nav-item" data-tab="search">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <span>搜索</span>
+                </button>
+                <button class="nav-item" data-tab="outdated">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
                         <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
                     </svg>
-                    全部更新
+                    <span>可更新</span>
+                    <span class="badge badge-danger" id="outdated-badge" style="display:none;">0</span>
                 </button>
-            </div>
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                        <tr><th>名称</th><th>当前版本</th><th>类型</th><th>操作</th></tr>
-                    </thead>
-                    <tbody id="outdated-tbody">
-                        <tr><td colspan="4"><div class="loading-state"><span class="spinner"></span> 加载中...</div></td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Dependencies -->
-        <div class="tab-content" id="tab-dependencies">
-            <div class="page-header"><h1>依赖管理</h1></div>
-            <div class="dependency-section">
-                <h2>查找包的依赖</h2>
-                <div class="dependency-search">
-                    <input type="text" id="dep-search-input" class="search-input" placeholder="输入包名查看依赖...">
-                    <button class="btn btn-primary" onclick="loadDependencies()">查询</button>
-                </div>
-                <div id="dependency-results" class="dependency-results">
-                    <p class="empty-state">输入包名查看其依赖关系</p>
-                </div>
-            </div>
-            <div class="dependency-section">
-                <h2>反向依赖 (谁依赖它)</h2>
-                <div class="dependency-search">
-                    <input type="text" id="uses-search-input" class="search-input" placeholder="输入包名查看谁依赖它...">
-                    <button class="btn btn-primary" onclick="loadUses()">查询</button>
-                </div>
-                <div id="uses-results" class="dependency-results">
-                    <p class="empty-state">输入包名查看哪些包依赖它</p>
-                </div>
-            </div>
-            <div class="dependency-section">
-                <h2>顶层包 (Leaves)</h2>
-                <p class="dependency-hint">直接安装、不被其他包依赖的顶层包。</p>
-                <button class="btn btn-secondary" onclick="loadLeaves()">加载顶层包</button>
-                <div id="leaves-list" class="dependency-results" style="margin-top:12px;"></div>
-            </div>
-            <div class="dependency-section">
-                <h2>缺失依赖</h2>
-                <p class="dependency-hint">检查是否有包缺少依赖项。</p>
-                <button class="btn btn-secondary" onclick="loadMissing()">检查缺失依赖</button>
-                <div id="missing-list" class="dependency-results" style="margin-top:12px;"></div>
-            </div>
-            <div class="dependency-section">
-                <h2>孤立依赖清理</h2>
-                <p class="dependency-hint">清理不再被任何已安装包依赖的孤立依赖包，释放磁盘空间。</p>
-                <button class="btn btn-warning" onclick="autoremoveDeps()">执行清理</button>
-                <div id="autoremove-result" class="autoremove-result"></div>
-            </div>
-        </div>
-
-        <!-- Taps Management -->
-        <div class="tab-content" id="tab-taps">
-            <div class="page-header">
-                <h1>Taps 管理</h1>
-            </div>
-            <div class="settings-section">
-                <div class="tap-add-row">
-                    <input type="text" id="tap-input" class="search-input" placeholder="输入 tap 名称，如: homebrew/cask">
-                    <button class="btn btn-primary" onclick="addTap()">添加 Tap</button>
-                </div>
-                <div id="taps-list" class="tap-list" style="margin-top:12px;"></div>
-            </div>
-        </div>
-
-        <!-- Config (includes Update, Doctor, Vulnerabilities) -->
-        <div class="tab-content" id="tab-config">
-            <div class="page-header"><h1>配置</h1></div>
-
-            <!-- Brew Config -->
-            <div class="settings-section">
-                <h2>Brew 配置</h2>
-                <pre id="config-output" class="output-pre">加载中...</pre>
-            </div>
-
-            <!-- Update -->
-            <div class="settings-section">
-                <h2>Homebrew 更新</h2>
-                <button class="btn btn-primary" id="update-btn" onclick="runUpdate()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                <button class="nav-item" data-tab="dependencies">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+                        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+                        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
                     </svg>
-                    执行 brew update
+                    <span>依赖</span>
                 </button>
-                <pre id="update-output" class="output-pre" style="margin-top:12px;">点击「执行 brew update」开始更新...</pre>
-            </div>
-
-            <!-- Doctor -->
-            <div class="settings-section">
-                <h2>系统诊断</h2>
-                <button class="btn btn-primary" onclick="runDoctor()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                <button class="nav-item" data-tab="taps">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                     </svg>
-                    运行 brew doctor
+                    <span>Taps</span>
                 </button>
-                <pre id="doctor-output" class="output-pre" style="margin-top:12px;">点击「运行 brew doctor」检查系统状态...</pre>
-            </div>
-
-            <!-- Vulnerabilities -->
-            <div class="settings-section">
-                <h2>安全漏洞扫描</h2>
-                <button class="btn btn-primary" onclick="runVulns()">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <div class="sidebar-divider"></div>
+                <button class="nav-item" data-tab="config">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                     </svg>
-                    扫描漏洞
+                    <span>配置</span>
                 </button>
-                <pre id="vulns-output" class="output-pre" style="margin-top:12px;">点击「扫描漏洞」检查已知安全漏洞...</pre>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard -->
+            <div class="tab-content active" id="tab-dashboard">
+                <div class="page-header">
+                    <h1>概览</h1>
+                    <button class="btn btn-primary" onclick="refreshDashboard()">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        刷新
+                    </button>
+                </div>
+                <div class="stats-grid" id="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-blue">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                            </svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value skeleton-text" id="stat-total">-</div>
+                            <div class="stat-label">已安装包</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-green">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                                <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+                            </svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value skeleton-text" id="stat-casks">-</div>
+                            <div class="stat-label">应用 (Cask)</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-orange">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+                            </svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value skeleton-text" id="stat-outdated">-</div>
+                            <div class="stat-label">可更新</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="dashboard-section">
+                    <h2>磁盘使用</h2>
+                    <div class="disk-usage-grid" id="disk-usage-grid"></div>
+                </div>
+                <div class="dashboard-section">
+                    <h2>数据管理</h2>
+                    <div class="settings-actions">
+                        <button class="btn btn-secondary" onclick="exportConfig()">导出配置</button>
+                        <button class="btn btn-secondary" onclick="cleanupBrew()">清理缓存</button>
+                        <button class="btn btn-warning" onclick="autoremoveDeps()">清理孤立依赖</button>
+                    </div>
+                </div>
+                <div class="dashboard-section">
+                    <h2>最近操作</h2>
+                    <div id="recent-actions" class="action-list">
+                        <p class="empty-state">暂无操作记录</p>
+                    </div>
+                </div>
             </div>
-        </div>
 
+            <!-- Installed Cask -->
+            <div class="tab-content" id="tab-installed-cask">
+                <div class="page-header">
+                    <h1>应用容器</h1>
+                    <input type="text" id="installed-cask-search" class="search-input" placeholder="搜索..." oninput="filterInstalled('cask')">
+                </div>
+                <div id="cask-list" class="pkg-list">
+                    <div class="loading-state"><span class="spinner"></span> 加载中...</div>
+                </div>
+            </div>
 
-    </main>
+            <!-- Installed Formula -->
+            <div class="tab-content" id="tab-installed-formula">
+                <div class="page-header">
+                    <h1>命令行工具</h1>
+                    <input type="text" id="installed-formula-search" class="search-input" placeholder="搜索..." oninput="filterInstalled('formula')">
+                </div>
+                <div id="formula-list" class="pkg-list">
+                    <div class="loading-state"><span class="spinner"></span> 加载中...</div>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="tab-content" id="tab-search">
+                <div class="page-header"><h1>搜索</h1></div>
+                <div class="search-box">
+                    <input type="text" id="search-input" class="search-input search-input-lg" placeholder="搜索 Homebrew 公式或应用…" oninput="debounceSearch()">
+                </div>
+                <div id="search-results" class="results-list">
+                    <p class="empty-state">输入关键词搜索 Homebrew 包</p>
+                </div>
+            </div>
+
+            <!-- Outdated -->
+            <div class="tab-content" id="tab-outdated">
+                <div class="page-header">
+                    <h1>可更新</h1>
+                    <button class="btn btn-primary" id="upgrade-all-btn" onclick="upgradeAll()">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+                        </svg>
+                        全部更新
+                    </button>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr><th>名称</th><th>当前版本</th><th>类型</th><th>操作</th></tr>
+                        </thead>
+                        <tbody id="outdated-tbody">
+                            <tr><td colspan="4"><div class="loading-state"><span class="spinner"></span> 加载中...</div></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Dependencies -->
+            <div class="tab-content" id="tab-dependencies">
+                <div class="page-header"><h1>依赖管理</h1></div>
+                <div class="dependency-section">
+                    <h2>查找包的依赖</h2>
+                    <div class="dependency-search">
+                        <input type="text" id="dep-search-input" class="search-input" placeholder="输入包名查看依赖…">
+                        <button class="btn btn-primary" onclick="loadDependencies()">查询</button>
+                    </div>
+                    <div id="dependency-results" class="dependency-results">
+                        <p class="empty-state">输入包名查看其依赖关系</p>
+                    </div>
+                </div>
+                <div class="dependency-section">
+                    <h2>反向依赖 (谁依赖它)</h2>
+                    <div class="dependency-search">
+                        <input type="text" id="uses-search-input" class="search-input" placeholder="输入包名查看谁依赖它…">
+                        <button class="btn btn-primary" onclick="loadUses()">查询</button>
+                    </div>
+                    <div id="uses-results" class="dependency-results">
+                        <p class="empty-state">输入包名查看哪些包依赖它</p>
+                    </div>
+                </div>
+                <div class="dependency-section">
+                    <h2>顶层包 (Leaves)</h2>
+                    <p class="dependency-hint">直接安装、不被其他包依赖的顶层包。</p>
+                    <button class="btn btn-secondary" onclick="loadLeaves()">加载顶层包</button>
+                    <div id="leaves-list" class="dependency-results" style="margin-top:12px;"></div>
+                </div>
+                <div class="dependency-section">
+                    <h2>缺失依赖</h2>
+                    <p class="dependency-hint">检查是否有包缺少依赖项。</p>
+                    <button class="btn btn-secondary" onclick="loadMissing()">检查缺失依赖</button>
+                    <div id="missing-list" class="dependency-results" style="margin-top:12px;"></div>
+                </div>
+                <div class="dependency-section">
+                    <h2>孤立依赖清理</h2>
+                    <p class="dependency-hint">清理不再被任何已安装包依赖的孤立依赖包，释放磁盘空间。</p>
+                    <button class="btn btn-warning" onclick="autoremoveDeps()">执行清理</button>
+                    <div id="autoremove-result" class="autoremove-result"></div>
+                </div>
+            </div>
+
+            <!-- Taps Management -->
+            <div class="tab-content" id="tab-taps">
+                <div class="page-header"><h1>Taps 管理</h1></div>
+                <div class="settings-section">
+                    <div class="tap-add-row">
+                        <input type="text" id="tap-input" class="search-input" placeholder="输入 tap 名称，如: homebrew/cask">
+                        <button class="btn btn-primary" onclick="addTap()">添加 Tap</button>
+                    </div>
+                    <div id="taps-list" class="tap-list" style="margin-top:12px;"></div>
+                </div>
+            </div>
+
+            <!-- Config (includes Update, Doctor, Vulnerabilities) -->
+            <div class="tab-content" id="tab-config">
+                <div class="page-header"><h1>配置</h1></div>
+
+                <!-- Brew Config -->
+                <div class="settings-section">
+                    <h2>Brew 配置</h2>
+                    <pre id="config-output" class="output-pre">加载中...</pre>
+                </div>
+
+                <!-- Update -->
+                <div class="settings-section">
+                    <h2>Homebrew 更新</h2>
+                    <button class="btn btn-primary" id="update-btn" onclick="runUpdate()">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        执行 brew update
+                    </button>
+                    <pre id="update-output" class="output-pre" style="margin-top:12px;">点击「执行 brew update」开始更新...</pre>
+                </div>
+
+                <!-- Doctor -->
+                <div class="settings-section">
+                    <h2>系统诊断</h2>
+                    <button class="btn btn-primary" onclick="runDoctor()">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                        </svg>
+                        运行 brew doctor
+                    </button>
+                    <pre id="doctor-output" class="output-pre" style="margin-top:12px;">点击「运行 brew doctor」检查系统状态...</pre>
+                </div>
+
+                <!-- Vulnerabilities -->
+                <div class="settings-section">
+                    <h2>安全漏洞扫描</h2>
+                    <button class="btn btn-primary" onclick="runVulns()">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        </svg>
+                        扫描漏洞
+                    </button>
+                    <pre id="vulns-output" class="output-pre" style="margin-top:12px;">点击「扫描漏洞」检查已知安全漏洞...</pre>
+                </div>
+            </div>
+        </main>
+    </div>
 
     <!-- Toast Container -->
     <div id="toast-container" class="toast-container"></div>
