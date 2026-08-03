@@ -22,6 +22,15 @@ func main() {
 		MinWidth:         900,
 		MinHeight:        600,
 		WindowStartState: options.Normal,
+		Mac: &mac.Options{
+			About: &mac.AboutInfo{
+				Title:   "Brew Manager",
+				Message: "A GUI tool for managing Homebrew packages on macOS",
+			},
+			TitleBar:             mac.TitleBarHidden(),
+			WebviewIsTransparent: false,
+			WindowIsTranslucent:  false,
+		},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -30,14 +39,6 @@ func main() {
 		Bind: []interface{}{
 			app,
 			app.brewService,
-		},
-		Mac: &mac.Options{
-			About: &mac.AboutInfo{
-				Title:   "Brew Manager",
-				Message: "A GUI tool for managing Homebrew packages on macOS",
-			},
-			WebviewIsTransparent: false,
-			WindowIsTranslucent:  false,
 		},
 	})
 

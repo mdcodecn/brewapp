@@ -10,6 +10,17 @@
 <div id="app">
     <!-- Top bar: fixed on macOS, normal flow on other platforms -->
     <div class="app-topbar">
+        <div class="window-controls">
+            <button class="control-btn minimize" id="btn-minimize" title="最小化">
+                <svg viewBox="0 0 10 10" width="8" height="8"><line x1="1" y1="5" x2="9" y2="5" stroke-width="1.2"/></svg>
+            </button>
+            <button class="control-btn maximize" id="btn-maximize" title="最大化">
+                <svg viewBox="0 0 10 10" width="8" height="8"><rect x="1.5" y="1.5" width="7" height="7" rx="1" fill="none" stroke-width="1.2"/></svg>
+            </button>
+            <button class="control-btn close" id="btn-close" title="关闭">
+                <svg viewBox="0 0 10 10" width="8" height="8"><line x1="2" y1="2" x2="8" y2="8" stroke-width="1.2"/><line x1="8" y1="2" x2="2" y2="8" stroke-width="1.2"/></svg>
+            </button>
+        </div>
         <span class="topbar-title">Brew Manager</span>
         <div class="topbar-actions">
             <button class="topbar-btn" id="topbar-search-btn" title="搜索 (⌘S)">

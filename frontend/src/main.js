@@ -1,6 +1,7 @@
 // ===== Wails Bindings =====
 import * as App from '../wailsjs/go/main/App';
 import * as Service from '../wailsjs/go/main/Service';
+import * as runtime from '../wailsjs/runtime/runtime.js';
 
 // ===== Tab Navigation with Slide Transition =====
 let currentTab = 'dashboard';
@@ -1241,6 +1242,7 @@ async function loadUses() {
 
 // ===== Topbar Search Button =====
 document.addEventListener('DOMContentLoaded', () => {
+    // Topbar search button
     const searchBtn = document.getElementById('topbar-search-btn');
     if (searchBtn) {
         searchBtn.addEventListener('click', () => {
@@ -1249,6 +1251,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 const input = document.getElementById('search-input');
                 if (input) input.focus();
             }, 100);
+        });
+    }
+
+    // Window controls
+    const btnMinimize = document.getElementById('btn-minimize');
+    if (btnMinimize) {
+        btnMinimize.addEventListener('click', () => {
+            runtime.WindowMinimise();
+        });
+    }
+
+    const btnMaximize = document.getElementById('btn-maximize');
+    if (btnMaximize) {
+        btnMaximize.addEventListener('click', () => {
+            runtime.WindowToggleMaximise();
+        });
+    }
+
+    const btnClose = document.getElementById('btn-close');
+    if (btnClose) {
+        btnClose.addEventListener('click', () => {
+            runtime.Quit();
         });
     }
 });

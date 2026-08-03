@@ -50,9 +50,8 @@ body {
 .app-topbar {
   display: flex;
   align-items: center;
-  height: 38px;
-  padding: 0 16px;
-  padding-bottom: 5px;
+  height: 28px;
+  padding: 0 12px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
@@ -64,6 +63,55 @@ body {
   -webkit-app-region: drag;
 }
 
+/* macOS window controls (left side) */
+.window-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+  position: relative;
+  left: 12px;
+}
+
+.control-btn {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  transition: filter 0.1s ease;
+}
+
+.control-btn svg {
+  display: none;
+}
+
+.control-btn.minimize {
+  background: #ffbd2e;
+}
+.control-btn.minimize:hover {
+  filter: brightness(0.9);
+}
+
+.control-btn.maximize {
+  background: #28c940;
+}
+.control-btn.maximize:hover {
+  filter: brightness(0.9);
+}
+
+.control-btn.close {
+  background: #ff5f57;
+}
+.control-btn.close:hover {
+  filter: brightness(0.9);
+}
+
 .topbar-title {
   flex: 1;
   text-align: center;
@@ -71,12 +119,14 @@ body {
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: -0.01em;
+  -webkit-app-region: no-drag;
 }
 
 .topbar-actions {
   display: flex;
   align-items: center;
   gap: 4px;
+  -webkit-app-region: no-drag;
 }
 
 .topbar-btn {
@@ -91,7 +141,6 @@ body {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.12s ease;
-  -webkit-app-region: no-drag;
 }
 
 .topbar-btn:hover {
@@ -107,7 +156,7 @@ body {
   display: flex;
   flex-direction: row;
   flex: 1;
-  margin-top: 38px;
+  margin-top: 28px;
 }
 
 /* ===== Sidebar ===== */
