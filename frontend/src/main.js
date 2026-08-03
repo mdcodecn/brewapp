@@ -798,6 +798,15 @@ async function loadTapsInBackground() {
 }
 
 function renderTaps(taps) {
+    // Update sidebar badge
+    const tapBadge = document.getElementById('tap-count-badge');
+    if (taps.length > 0) {
+        tapBadge.style.display = 'inline';
+        tapBadge.textContent = taps.length;
+    } else {
+        tapBadge.style.display = 'none';
+    }
+
     document.getElementById('taps-list').innerHTML = taps.length > 0
         ? taps.map(t => {
             const tapName = t.split(' ')[0];
