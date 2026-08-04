@@ -45,6 +45,7 @@ body {
   height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  position: relative;
 }
 
 /* ===== Layout ===== */
@@ -62,17 +63,17 @@ body {
   height: 35px;
   background: var(--bg-secondary);
   flex-shrink: 0;
-  z-index: 100;
+  z-index: 9999;
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  -webkit-app-region: drag;
+  /* Wails v2 frameless window drag region (CSS custom property read by the injected runtime) */
+  --wails-draggable: drag;
 }
 
 .topbar-search-wrapper {
   position: relative;
-  -webkit-app-region: no-drag;
   width: 100%;
   display: flex;
   justify-content: center;
@@ -81,6 +82,7 @@ body {
 }
 
 .topbar-search-input {
+  --wails-draggable: no-drag;
   width: 320px;
   height: 26px;
   padding: 0 10px;
@@ -100,6 +102,7 @@ body {
 }
 
 .topbar-search-dropdown {
+  --wails-draggable: no-drag;
   position: absolute;
   top: 32px;
   left: 50%;
@@ -170,7 +173,6 @@ body {
   display: flex;
   flex-direction: row;
   flex: 1;
-  margin-top: 35px;
 }
 
 /* ===== Sidebar ===== */
@@ -183,6 +185,9 @@ body {
   user-select: none;
   overflow-y: auto;
   overflow-x: hidden;
+  position: relative;
+  z-index: 1;
+  margin-top: 35px;
 }
 
 .sidebar-nav {
@@ -269,6 +274,8 @@ body {
   overflow: hidden;
   position: relative;
   background: var(--bg-primary);
+  z-index: 1;
+  margin-top: 35px;
 }
 
 .tab-content {
@@ -351,30 +358,33 @@ body {
 }
 
 .btn-secondary {
-  background: transparent;
+  background: var(--accent-dim);
   color: var(--accent);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: var(--accent-dim);
+  background: var(--accent-hover);
+  color: #fff;
 }
 
 .btn-danger {
-  background: transparent;
+  background: var(--danger-dim);
   color: var(--danger);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: var(--danger-dim);
+  background: var(--danger);
+  color: #fff;
 }
 
 .btn-warning {
-  background: transparent;
+  background: var(--warning-dim);
   color: var(--warning);
 }
 
 .btn-warning:hover:not(:disabled) {
-  background: var(--warning-dim);
+  background: var(--warning);
+  color: #fff;
 }
 
 .btn-sm {

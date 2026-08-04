@@ -1110,4 +1110,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     // Load dashboard immediately (first load, no cache)
     refreshDashboard();
+
+
 })();
