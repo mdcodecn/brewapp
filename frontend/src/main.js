@@ -481,10 +481,9 @@ async function reinstallPackage(name, type) {
     showModalLoading(
         '确认重装',
         `确定要重装 <strong>${escapeHtml(name)}</strong> 吗？这将重新下载并安装该包。`,
-        async (confirmBtn) => {
+        async () => {
             try {
                 await Service.Reinstall(name, type);
-                showToast(`${name} 重装成功`, 'success');
                 // Reload after a short delay
                 setTimeout(() => {
                     markCacheDirty('installed');
@@ -493,11 +492,10 @@ async function reinstallPackage(name, type) {
                     installedPackages = [];
                     loadInstalled(currentTab);
                 }, 500);
+                return `${name} 重装成功`;
             } catch (err) {
-                showToast('重装失败: ' + err.message, 'error');
+                throw new Error(`重装失败: ${err.message}`);
             }
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -507,10 +505,9 @@ async function uninstallPackage(name, type) {
     showModalLoading(
         '确认卸载',
         `确定要卸载 <strong>${escapeHtml(name)}</strong> 吗？`,
-        async (confirmBtn) => {
+        async () => {
             try {
                 await Service.Uninstall(name, type);
-                showToast(`${name} 已卸载`, 'success');
                 markCacheDirty('installed');
                 // Clear cache and reload
                 tabCache.installed.data = null;
@@ -519,11 +516,10 @@ async function uninstallPackage(name, type) {
                 tabCache.dashboard.timestamp = 0;
                 installedPackages = [];
                 loadInstalled(currentTab);
+                return `${name} 已卸载`;
             } catch (err) {
-                showToast('卸载失败: ' + err.message, 'error');
+                throw new Error(`卸载失败: ${err.message}`);
             }
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -562,10 +558,9 @@ window.topbarInstallPackage = async function(name, type) {
     showModalLoading(
         '确认安装',
         `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？`,
-        async (confirmBtn) => {
+        async () => {
             try {
                 await Service.Install(name, type);
-                showToast(`${name} 安装成功`, 'success');
                 markCacheDirty('installed');
                 markCacheDirty('dashboard');
                 tabCache.installed.data = null;
@@ -573,11 +568,10 @@ window.topbarInstallPackage = async function(name, type) {
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
                 installedPackages = [];
+                return `${name} 安装成功`;
             } catch (err) {
-                showToast('安装失败: ' + err.message, 'error');
+                throw new Error(`安装失败: ${err.message}`);
             }
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '确认';
         }
     );
 };
@@ -608,10 +602,9 @@ async function installPackage(name, type) {
     showModalLoading(
         '确认安装',
         `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？`,
-        async (confirmBtn) => {
+        async () => {
             try {
                 await Service.Install(name, type);
-                showToast(`${name} 安装成功`, 'success');
                 markCacheDirty('installed');
                 markCacheDirty('dashboard');
                 // Clear cache and reload
@@ -620,11 +613,10 @@ async function installPackage(name, type) {
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
                 installedPackages = [];
+                return `${name} 安装成功`;
             } catch (err) {
-                showToast('安装失败: ' + err.message, 'error');
+                throw new Error(`安装失败: ${err.message}`);
             }
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -781,21 +773,20 @@ async function cleanupBrew() {
     showModalLoading(
         '清理缓存',
         '确定要清理 Homebrew 缓存和旧版本吗？',
-        async (confirmBtn) => {
+        async () => {
+            setButtonLoading(btn, true, '清理缓存');
             try {
-                setButtonLoading(btn, true, '清理缓存');
                 await Service.Cleanup();
-                showToast('清理完成', 'success');
                 markCacheDirty('dashboard');
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
                 refreshDashboard();
+                return '清理完成';
             } catch (err) {
-                showToast('清理失败: ' + err.message, 'error');
+                throw new Error(`清理失败: ${err.message}`);
+            } finally {
+                setButtonLoading(btn, false, '清理缓存');
             }
-            setButtonLoading(btn, false, '清理缓存');
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -806,21 +797,20 @@ async function autoremoveDeps() {
     showModalLoading(
         '清理孤立依赖',
         '确定要清理不再被任何包依赖的孤立依赖吗？这将释放磁盘空间。',
-        async (confirmBtn) => {
+        async () => {
             setButtonLoading(btn, true, '执行清理');
             try {
                 await Service.Autoremove();
-                showToast('清理完成', 'success');
                 markCacheDirty('dashboard');
                 tabCache.dashboard.data = null;
                 tabCache.dashboard.timestamp = 0;
                 refreshDashboard();
+                return '清理完成';
             } catch (err) {
-                showToast('清理失败: ' + err.message, 'error');
+                throw new Error(`清理失败: ${err.message}`);
+            } finally {
+                setButtonLoading(btn, false, '执行清理');
             }
-            setButtonLoading(btn, false, '执行清理');
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -906,19 +896,17 @@ async function removeTap(tap) {
     showModalLoading(
         '确认移除 Tap',
         `确定要移除 tap <strong>${escapeHtml(tap)}</strong> 吗？`,
-        async (confirmBtn) => {
+        async () => {
             try {
                 await Service.RemoveTap(tap);
-                showToast(`Tap ${tap} 已移除`, 'success');
                 markCacheDirty('taps');
                 tabCache.taps.data = null;
                 tabCache.taps.timestamp = 0;
                 loadTaps();
+                return `Tap ${tap} 已移除`;
             } catch (err) {
-                showToast('移除失败: ' + err.message, 'error');
+                throw new Error(`移除失败: ${err.message}`);
             }
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = '确认';
         }
     );
 }
@@ -950,16 +938,40 @@ function setButtonLoading(btn, loading, originalText) {
 function showModalLoading(title, bodyHTML, onConfirm) {
     document.getElementById('modal-title').textContent = title;
     const body = document.getElementById('modal-body');
-    body.innerHTML = bodyHTML + '<div class="loading-state" style="padding:16px 0;"><span class="spinner"></span> 执行中...</div>';
+    body.innerHTML = bodyHTML;
     document.getElementById('modal-overlay').style.display = 'flex';
     const confirmBtn = document.getElementById('modal-confirm');
     const newBtn = confirmBtn.cloneNode(true);
     confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
-    newBtn.addEventListener('click', () => {
+    newBtn.addEventListener('click', async () => {
+        // After the operation has completed, the button turns into "关闭"
+        if (newBtn.dataset.done === '1') {
+            closeModal();
+            return;
+        }
         newBtn.disabled = true;
         newBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> 执行中...';
-        onConfirm(newBtn);
+        try {
+            const result = await onConfirm(newBtn);
+            if (result) renderModalResult(body, 'success', result);
+        } catch (err) {
+            renderModalResult(body, 'error', err.message || '操作失败');
+        } finally {
+            newBtn.dataset.done = '1';
+            newBtn.disabled = false;
+            newBtn.innerHTML = '关闭';
+        }
     });
+}
+
+// Show operation result inside the modal body (after onConfirm resolves/rejects)
+function renderModalResult(body, type, message) {
+    const prev = body.querySelector('.modal-result');
+    if (prev) prev.remove();
+    const div = document.createElement('div');
+    div.className = `modal-result modal-result-${type}`;
+    div.textContent = (type === 'success' ? '✓ ' : '✗ ') + message;
+    body.appendChild(div);
 }
 
 window.setButtonLoading = setButtonLoading;

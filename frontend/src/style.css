@@ -1047,6 +1047,27 @@ body {
   padding: 12px 20px;
 }
 
+/* Result shown inside the modal body after an operation completes */
+.modal-result {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.modal-result-success {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.modal-result-error {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
 /* ===== Loading Spinner ===== */
 .spinner {
   display: inline-block;
