@@ -8,17 +8,23 @@
 </head>
 <body>
 <div id="app">
-    <!-- Top bar: fixed on macOS, normal flow on other platforms -->
-    <div class="app-topbar">
-        <div class="topbar-search-wrapper">
-            <input type="text" id="topbar-search-input" class="topbar-search-input" placeholder="搜索 Homebrew 包…">
-            <div id="topbar-search-dropdown" class="topbar-search-dropdown" style="display:none;"></div>
-        </div>
-    </div>
-
     <div class="app-frame">
         <!-- Sidebar -->
         <aside class="sidebar">
+            <div class="sidebar-titlebar">
+                <div class="window-controls">
+                    <button class="traffic-light traffic-close" onclick="windowClose()" aria-label="关闭" title="关闭">
+                        <svg viewBox="0 0 12 12" width="12" height="12"><line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/></svg>
+                    </button>
+                    <button class="traffic-light traffic-min" onclick="windowMinimise()" aria-label="最小化" title="最小化">
+                        <svg viewBox="0 0 12 12" width="12" height="12"><line x1="3" y1="6" x2="9" y2="6"/></svg>
+                    </button>
+                    <button class="traffic-light traffic-max" onclick="windowMaximise()" aria-label="最大化" title="最大化">
+                        <svg viewBox="0 0 12 12" width="12" height="12"><line x1="9.5" y1="2.5" x2="2.5" y2="9.5"/><polyline points="3.5 2.5 9.5 2.5 9.5 8.5"/></svg>
+                    </button>
+                </div>
+                <span class="app-title">Brew Manager</span>
+            </div>
             <nav class="sidebar-nav">
                 <button class="nav-item active" data-tab="dashboard">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -26,6 +32,12 @@
                         <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
                     </svg>
                     <span>概览</span>
+                </button>
+                <button class="nav-item" data-tab="search">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <span>搜索</span>
                 </button>
                 <button class="nav-item" data-tab="installed-cask">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -117,6 +129,15 @@
                         <button class="btn btn-secondary" onclick="cleanupBrew()">清理缓存</button>
                         <button class="btn btn-warning" onclick="autoremoveDeps()">清理孤立依赖</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Search -->
+            <div class="tab-content" id="tab-search">
+                <div class="search-page">
+                    <h1 class="search-page-title">搜索 Homebrew 包</h1>
+                    <input type="text" id="search-input" class="search-input search-input-lg" placeholder="输入包名，如: git、google-chrome…" autocomplete="off">
+                    <div id="search-results" class="results-list"></div>
                 </div>
             </div>
 

@@ -18,6 +18,7 @@
 :root {
   /* Apple color palette */
   --bg-primary: #f5f5f7;
+  --bg-window: #e8e8ed;
   --bg-secondary: #ffffff;
   --bg-tertiary: #e8e8ed;
   --bg-hover: #d2d2d7;
@@ -40,10 +41,13 @@
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
-  background: var(--bg-primary);
+  /* Slightly deeper tone than the content sheet so the floating rounded panels read clearly */
+  background: var(--bg-window);
   color: var(--text-primary);
   overflow: hidden;
   height: 100vh;
+  /* Breathing room around the shell so the window's own rounded corners show through */
+  padding: 10px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   position: relative;
@@ -52,123 +56,8 @@ body {
 /* ===== Layout ===== */
 #app {
   display: flex;
-  height: 100vh;
+  height: 100%;
   flex-direction: row;
-}
-
-/* ===== Top Bar ===== */
-.app-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 35px;
-  background: var(--bg-secondary);
-  flex-shrink: 0;
-  z-index: 9999;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  /* Wails v2 frameless window drag region (CSS custom property read by the injected runtime) */
-  --wails-draggable: drag;
-}
-
-.topbar-search-wrapper {
-  position: relative;
-  width: 100%;
-  display: flex;
-  justify-content: center;
-  padding: 0 16px;
-  box-sizing: border-box;
-}
-
-.topbar-search-input {
-  --wails-draggable: no-drag;
-  width: 320px;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 8px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: inherit;
-  outline: none;
-  transition: none;
-  -webkit-appearance: none;
-  appearance: none;
-  border: none;
-}
-
-.topbar-search-input:focus {
-  background-color: var(--accent-dim);
-}
-
-.topbar-search-dropdown {
-  --wails-draggable: no-drag;
-  position: absolute;
-  top: 32px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 380px;
-  max-height: 320px;
-  overflow-y: auto;
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  z-index: 200;
-  padding: 6px 0;
-}
-
-.topbar-search-dropdown .search-result-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
-  cursor: pointer;
-  transition: background 0.1s ease;
-}
-
-.topbar-search-dropdown .search-result-item:hover {
-  background: var(--accent-dim);
-}
-
-.topbar-search-dropdown .search-result-item .result-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.topbar-search-dropdown .search-result-item .result-type {
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-
-.topbar-search-dropdown .search-result-item .result-type.cask {
-  background: var(--success-dim);
-  color: var(--success);
-}
-
-.topbar-search-dropdown .search-result-item .result-type.formula {
-  background: var(--accent-dim);
-  color: var(--accent);
-}
-
-.topbar-search-dropdown .search-result-item .result-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  margin-left: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 160px;
-}
-
-.topbar-search-dropdown .empty-state {
-  padding: 16px;
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 13px;
 }
 
 .app-frame {
@@ -189,12 +78,76 @@ body {
   overflow-x: hidden;
   position: relative;
   z-index: 1;
-  margin-top: 35px;
+  /* Floating rounded panel: the custom traffic lights live inside the titlebar,
+     so the sidebar no longer needs to touch the top edge */
+  border-radius: 12px;
+}
+
+/* macOS-style traffic-light region + drag handle for the frameless window */
+.sidebar-titlebar {
+  height: 48px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  /* Wails v2 frameless window drag region (CSS custom property read by the injected runtime) */
+  --wails-draggable: drag;
+}
+
+/* Custom traffic lights (system ones hidden via frameless window) */
+.window-controls {
+  --wails-draggable: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 12px;
+  flex-shrink: 0;
+}
+
+.traffic-light {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  padding: 0;
+  transition: filter 0.1s ease;
+}
+
+.traffic-light svg {
+  opacity: 0;
+  fill: none;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.traffic-light:hover svg {
+  opacity: 1;
+}
+
+.traffic-light:active {
+  filter: brightness(0.82);
+}
+
+.traffic-close { background: #ff5f57; }
+.traffic-min { background: #febc2e; }
+.traffic-max { background: #28c840; }
+
+.app-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  padding-left: 10px;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 8px 8px;
+  padding: 2px 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -216,7 +169,7 @@ body {
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: all 0.1s ease;
   text-align: left;
@@ -277,7 +230,8 @@ body {
   position: relative;
   background: var(--bg-primary);
   z-index: 1;
-  margin-top: 35px;
+  margin-left: 6px;
+  border-radius: 12px;
 }
 
 .tab-content {
@@ -637,7 +591,7 @@ body {
 
 .search-input {
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 12px 8px 34px;
   color: var(--text-primary);
   font-size: 13px;
@@ -770,7 +724,7 @@ body {
   gap: 12px;
   padding: 10px 14px;
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 13px;
   transition: all 0.12s ease;
 }
@@ -834,7 +788,7 @@ body {
   gap: 12px;
   padding: 10px 14px;
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 13px;
   transition: all 0.12s ease;
 }
@@ -899,7 +853,7 @@ body {
 .detail-info-item {
   padding: 10px 12px;
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .detail-info-item .label {
@@ -944,10 +898,28 @@ body {
   color: #8b5cf6;
 }
 
+/* ===== Search Page ===== */
+.search-page {
+  max-width: 780px;
+  margin: 0 auto;
+}
+
+.search-page-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.search-page .search-input-lg {
+  background-color: var(--bg-secondary);
+}
+
 /* ===== Toast ===== */
 .toast-container {
   position: fixed;
-  top: 48px;
+  top: 16px;
   right: 16px;
   z-index: 1000;
   display: flex;
@@ -1169,7 +1141,7 @@ body {
   gap: 14px;
   padding: 12px 16px;
   background: var(--bg-secondary);
-  border-radius: 8px;
+  border-radius: 10px;
   transition: all 0.12s ease;
 }
 
@@ -1213,7 +1185,7 @@ body {
 /* ===== Output Pre ===== */
 .output-pre {
   background: var(--bg-primary);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 14px;
   font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
   font-size: 12px;

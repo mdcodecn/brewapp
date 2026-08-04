@@ -21,6 +21,8 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.brewService.setContext(ctx)
+	// Hide the system traffic lights (we draw our own in the sidebar)
+	hideSystemTrafficLights()
 }
 
 // Version returns the brew version info

@@ -1,6 +1,7 @@
 // ===== Wails Bindings =====
 import * as App from '../wailsjs/go/main/App';
 import * as Service from '../wailsjs/go/main/Service';
+import * as Runtime from '../wailsjs/runtime/runtime';
 
 // ===== Tab Navigation with Slide Transition =====
 let currentTab = 'dashboard';
@@ -34,6 +35,13 @@ function switchTab(tab) {
     else if (tab === 'taps') loadTaps();
     else if (tab === 'dependencies') {
         // Dependencies tab doesn't auto-load, waits for user input
+    }
+    else if (tab === 'search') {
+        // Focus the search input once the tab transition finishes
+        setTimeout(() => {
+            const input = document.getElementById('search-input');
+            if (input) input.focus();
+        }, 160);
     }
     else if (tab === 'config') loadConfig();
 }
@@ -524,77 +532,61 @@ async function uninstallPackage(name, type) {
     );
 }
 
-// ===== Topbar Search =====
+// ===== Search Page =====
 let searchTimeout = null;
 
-function closeTopbarSearch() {
-    const dropdown = document.getElementById('topbar-search-dropdown');
-    if (dropdown) dropdown.style.display = 'none';
-    const input = document.getElementById('topbar-search-input');
-    if (input) input.blur();
-}
-
-function renderTopbarSearchResults(results) {
-    const dropdown = document.getElementById('topbar-search-dropdown');
-    if (!dropdown) return;
+function renderSearchResults(results) {
+    const container = document.getElementById('search-results');
+    if (!container) return;
 
     if (!results || results.length === 0) {
-        dropdown.innerHTML = '<div class="empty-state">未找到匹配的结果</div>';
+        container.innerHTML = '<div class="empty-state">未找到匹配的包</div>';
         return;
     }
 
-    dropdown.innerHTML = results.slice(0, 12).map(r => `
-        <div class="search-result-item" onclick="topbarInstallPackage('${escapeHtml(r.name)}', '${r.type}')">
-            <span class="result-name">${escapeHtml(r.name)}</span>
-            <span class="result-type ${r.type}">${r.type === 'cask' ? '应用' : '公式'}</span>
-            ${r.installed ? '<span style="font-size:11px;color:var(--success);">✓ 已安装</span>' : ''}
-            <span class="result-desc">${escapeHtml(r.description || '')}</span>
+    container.innerHTML = results.slice(0, 50).map(r => `
+        <div class="result-item">
+            <div class="result-name">${escapeHtml(r.name)}</div>
+            <span class="type-badge ${r.type}">${r.type === 'cask' ? '应用' : '公式'}</span>
+            <div class="result-version">${escapeHtml(r.version || '')}</div>
+            <div class="result-desc">${escapeHtml(r.description || '暂无描述')}</div>
+            <div class="result-actions">
+                ${r.installed
+                    ? `<span class="installed-tag">✓ 已安装</span>
+                       <button class="btn btn-sm btn-secondary" onclick="showDetailFromSearch('${escapeHtml(r.name)}','${r.type}')">详情</button>`
+                    : `<button class="btn btn-sm btn-primary" onclick="installPackage('${escapeHtml(r.name)}', '${r.type}')">安装</button>`}
+            </div>
         </div>
     `).join('');
 }
 
-window.topbarInstallPackage = async function(name, type) {
-    closeTopbarSearch();
-    showModalLoading(
-        '确认安装',
-        `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？`,
-        async () => {
-            try {
-                await Service.Install(name, type);
-                markCacheDirty('installed');
-                markCacheDirty('dashboard');
-                tabCache.installed.data = null;
-                tabCache.installed.timestamp = 0;
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                installedPackages = [];
-                return `${name} 安装成功`;
-            } catch (err) {
-                throw new Error(`安装失败: ${err.message}`);
-            }
-        }
-    );
+window.showDetailFromSearch = function(name, type) {
+    showDetailModal({ name, type });
 };
 
-async function topbarDoSearch(query) {
-    const dropdown = document.getElementById('topbar-search-dropdown');
-    if (!dropdown) return;
-    dropdown.style.display = 'block';
-    dropdown.innerHTML = '<div class="loading-state" style="padding:12px;"><span class="spinner"></span> 搜索中...</div>';
+async function doSearch(query) {
+    const container = document.getElementById('search-results');
+    if (!container) return;
+    container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 搜索中...</div>';
 
     try {
         const results = await Service.Search(query);
-        renderTopbarSearchResults(results);
+        renderSearchResults(results);
     } catch (err) {
-        dropdown.innerHTML = `<div class="empty-state">搜索失败: ${err.message}</div>`;
+        container.innerHTML = `<div class="empty-state">搜索失败: ${escapeHtml(err.message)}</div>`;
     }
 }
 
-window.topbarDebounceSearch = function() {
+window.debounceSearch = function() {
     clearTimeout(searchTimeout);
-    const input = document.getElementById('topbar-search-input');
+    const input = document.getElementById('search-input');
     if (!input) return;
-    searchTimeout = setTimeout(() => topbarDoSearch(input.value), 300);
+    const query = input.value.trim();
+    if (!query) {
+        document.getElementById('search-results').innerHTML = '';
+        return;
+    }
+    searchTimeout = setTimeout(() => doSearch(query), 300);
 };
 
 window.installPackage = installPackage;
@@ -977,13 +969,27 @@ function renderModalResult(body, type, message) {
 window.setButtonLoading = setButtonLoading;
 window.showModalLoading = showModalLoading;
 
+// ===== Window Controls (custom traffic lights) =====
+window.windowClose = function() { Runtime.Quit(); };
+window.windowMinimise = function() { Runtime.WindowMinimise(); };
+window.windowMaximise = function() { Runtime.WindowToggleMaximise(); };
+
 // ===== Keyboard Shortcuts =====
 document.addEventListener('keydown', (e) => {
-    // Cmd/Ctrl + S = Focus topbar search
+    // Cmd/Ctrl + W = Close window
+    if ((e.metaKey || e.ctrlKey) && e.key === 'w') {
+        e.preventDefault();
+        Runtime.Quit();
+    }
+    // Cmd/Ctrl + M = Minimise
+    if ((e.metaKey || e.ctrlKey) && e.key === 'm') {
+        e.preventDefault();
+        Runtime.WindowMinimise();
+    }
+    // Cmd/Ctrl + S = Go to search page
     if ((e.metaKey || e.ctrlKey) && e.key === 's') {
         e.preventDefault();
-        const input = document.getElementById('topbar-search-input');
-        if (input) input.focus();
+        switchTab('search');
     }
     // Cmd/Ctrl + R = Refresh Dashboard
     if ((e.metaKey || e.ctrlKey) && e.key === 'r') {
@@ -1151,24 +1157,15 @@ async function unlinkPackage(name) {
     }
 }
 
-// ===== Topbar Search =====
+// ===== Search Page =====
 document.addEventListener('DOMContentLoaded', () => {
-    const searchInput = document.getElementById('topbar-search-input');
+    const searchInput = document.getElementById('search-input');
     if (searchInput) {
-        searchInput.addEventListener('input', () => window.topbarDebounceSearch());
+        searchInput.addEventListener('input', () => window.debounceSearch());
         searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') closeTopbarSearch();
+            if (e.key === 'Escape') searchInput.blur();
         });
     }
-
-    // Close dropdown when clicking outside
-    document.addEventListener('click', (e) => {
-        const dropdown = document.getElementById('topbar-search-dropdown');
-        const wrapper = document.querySelector('.topbar-search-wrapper');
-        if (dropdown && wrapper && !wrapper.contains(e.target)) {
-            closeTopbarSearch();
-        }
-    });
 });
 
 // ===== Init =====
