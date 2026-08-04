@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // BrewPackage represents a Homebrew package (cask or formula)
@@ -30,11 +35,18 @@ type BrewSearchResult struct {
 }
 
 // Service handles all brew operations
-type Service struct{}
+type Service struct {
+	ctx context.Context
+}
 
 // NewService creates a new brew service
 func NewService() *Service {
 	return &Service{}
+}
+
+// setContext stores the application context (called on startup)
+func (s *Service) setContext(ctx context.Context) {
+	s.ctx = ctx
 }
 
 // runBrew executes a brew command and returns the output
@@ -458,7 +470,13 @@ func (s *Service) GetDiskUsage() (map[string]string, error) {
 }
 
 // ExportConfig exports the list of installed packages to a file
+// It opens a native save dialog and writes the config to the chosen path,
+// returning the saved path (empty string when the user cancels).
 func (s *Service) ExportConfig() (string, error) {
+	if s.ctx == nil {
+		return "", fmt.Errorf("runtime context not ready")
+	}
+
 	caskOutput, _ := s.runBrew("list", "--cask")
 	formulaOutput, _ := s.runBrew("list")
 
@@ -466,7 +484,27 @@ func (s *Service) ExportConfig() (string, error) {
 		strings.TrimSpace(caskOutput),
 		strings.TrimSpace(formulaOutput))
 
-	return content, nil
+	defaultName := fmt.Sprintf("brew-config-%s.txt", time.Now().Format("2006-01-02"))
+	path, err := runtime.SaveFileDialog(s.ctx, runtime.SaveDialogOptions{
+		Title:           "导出 Brew 配置",
+		DefaultFilename: defaultName,
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Text Files (*.txt)", Pattern: "*.txt"},
+			{DisplayName: "All Files (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to open save dialog: %w", err)
+	}
+	if path == "" {
+		// User cancelled the dialog
+		return "", nil
+	}
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		return "", fmt.Errorf("failed to write config: %w", err)
+	}
+	return path, nil
 }
 
 // GetDependencies returns the dependencies for a package

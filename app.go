@@ -20,6 +20,7 @@ func NewApp() *App {
 // startup is called when the app starts
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	a.brewService.setContext(ctx)
 }
 
 // Version returns the brew version info

@@ -70,15 +70,6 @@
         <main class="main-content">
             <!-- Dashboard -->
             <div class="tab-content active" id="tab-dashboard">
-                <div class="page-header">
-                    <button class="btn btn-primary" onclick="refreshDashboard()">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                        </svg>
-                        刷新
-                    </button>
-                </div>
                 <div class="stats-grid" id="stats-grid">
                     <div class="stat-card">
                         <div class="stat-icon stat-icon-blue">
@@ -152,6 +143,7 @@
             <!-- Outdated -->
             <div class="tab-content" id="tab-outdated">
                 <div class="page-header">
+                    <input type="text" id="outdated-search" class="search-input" placeholder="搜索..." oninput="filterOutdated()">
                     <button class="btn btn-primary" id="upgrade-all-btn" onclick="upgradeAll()">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
@@ -159,15 +151,8 @@
                         全部更新
                     </button>
                 </div>
-                <div class="table-container">
-                    <table class="data-table">
-                        <thead>
-                            <tr><th>名称</th><th>当前版本</th><th>类型</th><th>操作</th></tr>
-                        </thead>
-                        <tbody id="outdated-tbody">
-                            <tr><td colspan="4"><div class="loading-state"><span class="spinner"></span> 加载中...</div></td></tr>
-                        </tbody>
-                    </table>
+                <div id="outdated-list" class="pkg-list">
+                    <div class="loading-state"><span class="spinner"></span> 加载中...</div>
                 </div>
             </div>
 

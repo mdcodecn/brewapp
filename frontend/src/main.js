@@ -260,11 +260,8 @@ function markCacheDirty(tab) {
 // ===== Dashboard =====
 window.refreshDashboard = refreshDashboard;
 async function refreshDashboard() {
-    const btn = document.querySelector('#tab-dashboard .page-header .btn-primary');
-
     // If cache is valid, render immediately from cache
     if (isCacheValid(tabCache.dashboard)) {
-        setButtonLoading(btn, true, '刷新');
         renderDashboard(tabCache.dashboard.data);
         // Still refresh disk usage and outdated in background
         Promise.allSettled([
@@ -275,12 +272,11 @@ async function refreshDashboard() {
                 }
             }).catch(() => {}),
             refreshDashboardInBackground(),
-        ]).finally(() => setButtonLoading(btn, false, '刷新'));
+        ]);
         return;
     }
 
     // Always render immediately with pre-loaded data (zero wait)
-    setButtonLoading(btn, true, '刷新');
     const quickData = { packages: installedPackages, diskUsage: {}, outdated: [], _outdatedLoaded: false };
     tabCache.dashboard.data = quickData;
     tabCache.dashboard.timestamp = Date.now();
@@ -302,7 +298,7 @@ async function refreshDashboard() {
             }
         }).catch(() => {}),
         refreshDashboardInBackground(),
-    ]).finally(() => setButtonLoading(btn, false, '刷新'));
+    ]);
 }
 
 async function refreshDashboardInBackground() {
@@ -371,11 +367,36 @@ function renderDashboard(data) {
 
     // Disk usage - render immediately (empty if no data yet)
     const diskGrid = document.getElementById('disk-usage-grid');
+    const DISK_ICONS = {
+        box: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
+        app: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`,
+        trash: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
+    };
+    const DISK_INFO = {
+        'Cellar':           { name: 'Cellar 安装目录', sub: '命令行工具（Formula）存放位置', icon: 'box' },
+        'Caskroom':         { name: 'Caskroom 安装目录', sub: '图形应用（Cask）存放位置', icon: 'app' },
+        'Cache':            { name: '缓存目录', sub: 'Homebrew 下载缓存', icon: 'trash' },
+        'Cellar (Intel)':   { name: 'Cellar 安装目录（Intel）', sub: '命令行工具（Formula）存放位置', icon: 'box' },
+        'Caskroom (Intel)': { name: 'Caskroom 安装目录（Intel）', sub: '图形应用（Cask）存放位置', icon: 'app' },
+        'Cache (Intel)':    { name: '缓存目录（Intel）', sub: 'Homebrew 下载缓存', icon: 'trash' },
+    };
+    // Go map 序列化后键顺序不固定，按固定顺序展示
+    const DISK_ORDER = ['Cellar', 'Caskroom', 'Cache', 'Cellar (Intel)', 'Caskroom (Intel)', 'Cache (Intel)'];
+    const sortedKeys = DISK_ORDER.filter(k => diskUsage[k] !== undefined);
     diskGrid.innerHTML = '';
-    for (const [label, value] of Object.entries(diskUsage)) {
+    if (sortedKeys.length === 0) {
+        diskGrid.innerHTML = '<div class="disk-empty">正在统计磁盘占用…</div>';
+    }
+    for (const label of sortedKeys) {
+        const value = diskUsage[label];
+        const info = DISK_INFO[label] || { name: label, sub: '', icon: 'box' };
         diskGrid.innerHTML += `
             <div class="disk-usage-item">
-                <span class="label">${escapeHtml(label)}</span>
+                <div class="disk-icon disk-icon-${info.icon}">${DISK_ICONS[info.icon]}</div>
+                <div class="disk-info">
+                    <span class="label">${escapeHtml(info.name)}</span>
+                    <span class="sub">${escapeHtml(info.sub)}</span>
+                </div>
                 <span class="value">${escapeHtml(value)}</span>
             </div>`;
     }
@@ -625,8 +646,8 @@ async function loadOutdated() {
         tabCache.outdated.timestamp = Date.now();
         renderOutdated(outdated);
     } catch (err) {
-        document.getElementById('outdated-tbody').innerHTML =
-            `<tr><td colspan="4" class="empty-state">加载失败: ${err.message}</td></tr>`;
+        document.getElementById('outdated-list').innerHTML =
+            `<p class="empty-state">加载失败: ${err.message}</p>`;
     }
 }
 
@@ -645,35 +666,49 @@ async function loadOutdatedInBackground() {
     }
 }
 
+window.filterOutdated = filterOutdated;
+function filterOutdated() {
+    renderOutdated(tabCache.outdated.data || []);
+}
+
 window.upgradePackage = upgradePackage;
 function renderOutdated(outdated) {
-    const tbody = document.getElementById('outdated-tbody');
+    const container = document.getElementById('outdated-list');
+    const search = (document.getElementById('outdated-search')?.value || '').toLowerCase();
+    const filtered = outdated.filter(p => {
+        if (!search) return true;
+        return p.name.toLowerCase().includes(search) ||
+               (p.description && p.description.toLowerCase().includes(search));
+    });
 
-    if (outdated.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">所有包都是最新的 ✓</td></tr>';
+    if (filtered.length === 0) {
+        container.innerHTML = outdated.length === 0
+            ? '<p class="empty-state">所有包都是最新的 ✓</p>'
+            : '<p class="empty-state">未找到匹配的包</p>';
         return;
     }
 
-    tbody.innerHTML = outdated.map(p => `
-        <tr>
-            <td class="name-cell">${escapeHtml(p.name)}</td>
-            <td>${escapeHtml(p.version || '-')}</td>
-            <td><span class="type-badge ${p.type}">${escapeHtml(p.type)}</span></td>
-            <td>
+    container.innerHTML = filtered.map(p => `
+        <div class="pkg-item">
+            <span class="pkg-name">${escapeHtml(p.name)}</span>
+            <span class="pkg-version">${escapeHtml(p.version || '-')}</span>
+            <span class="type-badge ${escapeHtml(p.type)}">${escapeHtml(p.type)}</span>
+            <span class="pkg-desc"></span>
+            <div class="pkg-actions">
                 <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
-            </td>
-        </tr>
+            </div>
+        </div>
     `).join('');
 }
 
 async function upgradePackage(name) {
-    // Find the button in the outdated table for this package
-    const rows = document.querySelectorAll('#outdated-tbody tr');
+    // Find the button in the outdated list for this package
+    const items = document.querySelectorAll('#outdated-list .pkg-item');
     let targetBtn = null;
-    for (const row of rows) {
-        const nameCell = row.querySelector('.name-cell');
-        if (nameCell && nameCell.textContent === name) {
-            targetBtn = row.querySelector('.btn');
+    for (const item of items) {
+        const nameEl = item.querySelector('.pkg-name');
+        if (nameEl && nameEl.textContent === name) {
+            targetBtn = item.querySelector('.pkg-actions .btn');
             break;
         }
     }
@@ -727,15 +762,14 @@ async function upgradeAll() {
 window.exportConfig = exportConfig;
 async function exportConfig() {
     try {
-        const content = await Service.ExportConfig();
-        const blob = new Blob([content], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `brew-config-${new Date().toISOString().slice(0, 10)}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-        showToast('配置已导出', 'success');
+        // Go side opens a native save dialog and writes the file,
+        // returning the saved path (empty if the user cancelled)
+        const path = await Service.ExportConfig();
+        if (!path) {
+            showToast('已取消导出', 'info');
+            return;
+        }
+        showToast('配置已导出: ' + path, 'success');
     } catch (err) {
         showToast('导出失败: ' + err.message, 'error');
     }
@@ -760,6 +794,31 @@ async function cleanupBrew() {
                 showToast('清理失败: ' + err.message, 'error');
             }
             setButtonLoading(btn, false, '清理缓存');
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '确认';
+        }
+    );
+}
+
+window.autoremoveDeps = autoremoveDeps;
+async function autoremoveDeps() {
+    const btn = document.querySelector('.dashboard-section .settings-actions .btn-warning');
+    showModalLoading(
+        '清理孤立依赖',
+        '确定要清理不再被任何包依赖的孤立依赖吗？这将释放磁盘空间。',
+        async (confirmBtn) => {
+            setButtonLoading(btn, true, '执行清理');
+            try {
+                await Service.Autoremove();
+                showToast('清理完成', 'success');
+                markCacheDirty('dashboard');
+                tabCache.dashboard.data = null;
+                tabCache.dashboard.timestamp = 0;
+                refreshDashboard();
+            } catch (err) {
+                showToast('清理失败: ' + err.message, 'error');
+            }
+            setButtonLoading(btn, false, '执行清理');
             confirmBtn.disabled = false;
             confirmBtn.innerHTML = '确认';
         }
