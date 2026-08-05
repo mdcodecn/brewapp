@@ -13,6 +13,16 @@
   outline: none !important;
   box-shadow: none !important;
   text-decoration: none !important;
+  /* 桌面 App 风格：UI 文字不可选中（输入框内仍可选中/复制，见下方规则） */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* 输入类控件保持可选文字，方便编辑/复制 */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 :root {
