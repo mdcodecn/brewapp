@@ -152,13 +152,39 @@ body {
 .traffic-min { background: #febc2e; }
 .traffic-max { background: #28c840; }
 
-.app-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: -0.01em;
-  white-space: nowrap;
+.app-logo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   padding-left: 12px;
+  white-space: nowrap;
+}
+
+.app-logo-word {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #6a70ff 0%, #4338ca 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #6366f1; /* fallback for non-WebKit */
+}
+
+.app-logo-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #fbb040;
+  flex-shrink: 0;
+}
+
+.app-logo-manager {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 5px;
+  letter-spacing: -0.01em;
 }
 
 .sidebar-nav {
