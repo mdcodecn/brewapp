@@ -565,6 +565,7 @@ function renderOutdatedPreview(outdated, loaded) {
         if (countEl) countEl.textContent = '…';
         container.innerHTML = Array.from({ length: 3 }, () => `
             <div class="outdated-item">
+                <div class="skeleton" style="width:40px;height:40px;border-radius:11px;flex-shrink:0;"></div>
                 <div class="skeleton" style="width:110px;height:12px;"></div>
                 <div class="skeleton" style="width:38px;height:12px;"></div>
                 <div class="skeleton" style="width:46px;height:22px;border-radius:8px;"></div>
@@ -586,8 +587,10 @@ function renderOutdatedPreview(outdated, loaded) {
     const top = outdated.slice(0, 5);
     container.innerHTML = top.map((p, i) => `
         <div class="outdated-item" style="animation-delay:${i * 0.05}s;">
+            <div class="pkg-icon pkg-icon-outdated pkg-icon-sm">${OUTDATED_ICON}</div>
             <span class="outdated-name" title="${escapeHtml(p.description || p.name)}">${escapeHtml(p.name)}</span>
             ${p.version ? `<span class="outdated-version">${escapeHtml(p.version)}</span>` : ''}
+            ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="outdated-version outdated-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
             <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
         </div>`).join('')
         + (outdated.length > 5 ? `
@@ -956,10 +959,11 @@ function renderOutdated(outdated) {
             <div class="pkg-main">
                 <div class="pkg-name-row">
                     <span class="pkg-name">${escapeHtml(p.name)}</span>
-                    <span class="pkg-version">当前 ${escapeHtml(p.version || '-')}</span>
+                    ${p.version ? `<span class="pkg-version">${escapeHtml(p.version)}</span>` : ''}
+                    ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="pkg-version pkg-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
                     <span class="type-badge ${escapeHtml(p.type)}">${escapeHtml(p.type === 'cask' ? '应用' : '公式')}</span>
                 </div>
-                <span class="pkg-desc">检测到可用更新，点击右侧按钮升级</span>
+                ${p.description ? `<span class="pkg-desc">${escapeHtml(p.description)}</span>` : ''}
             </div>
             <div class="pkg-actions">
                 <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>

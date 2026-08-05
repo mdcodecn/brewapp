@@ -168,7 +168,7 @@
                             可更新
                             <span class="section-count" id="outdated-section-count">0</span>
                         </h2>
-                        <div id="outdated-preview"></div>
+                        <div id="outdated-preview" class="outdated-preview"></div>
                     </div>
                 </div>
 
@@ -246,11 +246,12 @@
                     </div>
                     <div class="page-heading-actions">
                         <span class="count-badge count-badge-blue" id="cask-page-count">0 个</span>
-                        <button class="btn btn-secondary btn-icon-only btn-refresh" id="installed-cask-refresh" onclick="refreshInstalled('cask')" title="刷新列表">
+                        <button class="btn btn-secondary btn-refresh" id="installed-cask-refresh" onclick="refreshInstalled('cask')" title="刷新列表">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                             </svg>
+                            <span>刷新</span>
                         </button>
                     </div>
                 </div>
@@ -269,11 +270,12 @@
                     </div>
                     <div class="page-heading-actions">
                         <span class="count-badge count-badge-green" id="formula-page-count">0 个</span>
-                        <button class="btn btn-secondary btn-icon-only btn-refresh" id="installed-formula-refresh" onclick="refreshInstalled('formula')" title="刷新列表">
+                        <button class="btn btn-secondary btn-refresh" id="installed-formula-refresh" onclick="refreshInstalled('formula')" title="刷新列表">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                             </svg>
+                            <span>刷新</span>
                         </button>
                     </div>
                 </div>
@@ -292,11 +294,12 @@
                     </div>
                     <div class="page-heading-actions">
                         <span class="count-badge count-badge-orange" id="outdated-page-count">0 个</span>
-                        <button class="btn btn-secondary btn-icon-only btn-refresh" id="outdated-refresh" onclick="refreshOutdated()" title="刷新列表">
+                        <button class="btn btn-secondary btn-refresh" id="outdated-refresh" onclick="refreshOutdated()" title="刷新列表">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                             </svg>
+                            <span>刷新</span>
                         </button>
                         <button class="btn btn-primary" id="upgrade-all-btn" onclick="upgradeAll()">
                             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">

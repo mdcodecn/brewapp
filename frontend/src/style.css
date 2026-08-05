@@ -789,6 +789,13 @@ body {
   flex-shrink: 0;
 }
 
+.outdated-item .outdated-version-latest {
+  color: var(--warning);
+  background: var(--warning-dim);
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .outdated-more {
   display: flex;
   align-items: center;
@@ -1705,6 +1712,18 @@ body {
 .pkg-icon-formula { background: var(--success-dim); color: var(--success); }
 .pkg-icon-outdated { background: var(--warning-dim); color: var(--warning); }
 
+/* Compact icon for the dashboard outdated preview */
+.pkg-icon-sm {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+
+.pkg-icon-sm svg {
+  width: 15px;
+  height: 15px;
+}
+
 .pkg-main {
   flex: 1;
   min-width: 0;
@@ -1738,6 +1757,22 @@ body {
   font-weight: 500;
   font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.pkg-version-latest {
+  color: var(--warning);
+  background: var(--warning-dim);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Standalone arrow between current and latest version (not boxed) */
+.version-arrow {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
   flex-shrink: 0;
 }
 

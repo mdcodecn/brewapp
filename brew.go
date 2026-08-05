@@ -15,14 +15,15 @@ import (
 
 // BrewPackage represents a Homebrew package (cask or formula)
 type BrewPackage struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Description string `json:"description"`
-	Type        string `json:"type"` // "cask" or "formula"
-	Outdated    bool   `json:"outdated"`
-	Installed   bool   `json:"installed"`
-	DependsOn   []string `json:"depends_on,omitempty"`
-	InstallTime string   `json:"install_time,omitempty"`
+	Name          string   `json:"name"`
+	Version       string   `json:"version"`
+	LatestVersion string   `json:"latest_version,omitempty"`
+	Description   string   `json:"description"`
+	Type          string   `json:"type"` // "cask" or "formula"
+	Outdated      bool     `json:"outdated"`
+	Installed     bool     `json:"installed"`
+	DependsOn     []string `json:"depends_on,omitempty"`
+	InstallTime   string   `json:"install_time,omitempty"`
 }
 
 // BrewSearchResult represents a search result from brew search
@@ -73,6 +74,38 @@ func (s *Service) GetVersion() string {
 	return output
 }
 
+// installedInfoJSON holds the fields we need from `brew info --json=v2 --installed`
+type installedInfoJSON struct {
+	Formulae []struct {
+		Name string `json:"name"`
+		Desc string `json:"desc"`
+	} `json:"formulae"`
+	Casks []struct {
+		Token string `json:"token"`
+		Desc  string `json:"desc"`
+	} `json:"casks"`
+}
+
+// getInstalledDescriptions maps package name -> description using one brew call
+func (s *Service) getInstalledDescriptions() map[string]string {
+	desc := make(map[string]string)
+	output, err := s.runBrew("info", "--json=v2", "--installed")
+	if err != nil {
+		return desc
+	}
+	var data installedInfoJSON
+	if err := json.Unmarshal([]byte(output), &data); err != nil {
+		return desc
+	}
+	for _, f := range data.Formulae {
+		desc[f.Name] = f.Desc
+	}
+	for _, c := range data.Casks {
+		desc[c.Token] = c.Desc
+	}
+	return desc
+}
+
 // ListInstalled returns all installed packages
 func (s *Service) ListInstalled() ([]BrewPackage, error) {
 	// Use "brew list --versions" for both casks and formulas
@@ -108,6 +141,12 @@ func (s *Service) ListInstalled() ([]BrewPackage, error) {
 			continue
 		}
 		packages = append(packages, pkg)
+	}
+
+	// Enrich with descriptions (single JSON call, falls back gracefully)
+	descMap := s.getInstalledDescriptions()
+	for i := range packages {
+		packages[i].Description = descMap[packages[i].Name]
 	}
 
 	return packages, nil
@@ -306,14 +345,69 @@ func (s *Service) Upgrade(name ...string) error {
 }
 
 // GetOutdated returns all outdated packages
+// outdatedJSON holds the fields we need from `brew outdated --json=v2`
+type outdatedJSON struct {
+	Formulae []struct {
+		Name              string   `json:"name"`
+		InstalledVersions []string `json:"installed_versions"`
+		CurrentVersion    string   `json:"current_version"`
+		Pinned            bool     `json:"pinned"`
+	} `json:"formulae"`
+	Casks []struct {
+		Name              string   `json:"name"`
+		InstalledVersions []string `json:"installed_versions"`
+		CurrentVersion    string   `json:"current_version"`
+		Pinned            bool     `json:"pinned"`
+	} `json:"casks"`
+}
+
 func (s *Service) GetOutdated() ([]BrewPackage, error) {
-	output, err := s.runBrew("outdated")
+	// Prefer JSON output: `brew outdated --json=v2` includes versions and types
+	output, err := s.runBrew("outdated", "--json=v2")
 	// If brew outdated fails (e.g., brew needs updating first), return empty list
 	if err != nil {
 		return []BrewPackage{}, nil
 	}
 
-	// Pre-load cask list for type detection
+	var data outdatedJSON
+	if err := json.Unmarshal([]byte(output), &data); err == nil && (len(data.Formulae) > 0 || len(data.Casks) > 0) {
+		packages := make([]BrewPackage, 0, len(data.Formulae)+len(data.Casks))
+		for _, f := range data.Formulae {
+			version := ""
+			if len(f.InstalledVersions) > 0 {
+				version = f.InstalledVersions[len(f.InstalledVersions)-1]
+			}
+			packages = append(packages, BrewPackage{
+				Name:          f.Name,
+				Version:       version,
+				LatestVersion: f.CurrentVersion,
+				Type:          "formula",
+				Outdated:      true,
+			})
+		}
+		for _, c := range data.Casks {
+			version := ""
+			if len(c.InstalledVersions) > 0 {
+				version = c.InstalledVersions[len(c.InstalledVersions)-1]
+			}
+			packages = append(packages, BrewPackage{
+				Name:          c.Name,
+				Version:       version,
+				LatestVersion: c.CurrentVersion,
+				Type:          "cask",
+				Outdated:      true,
+			})
+		}
+		s.enrichDescriptions(packages)
+		// Sort: casks first, then formulas (stable, keeps brew's order within each type)
+		sort.SliceStable(packages, func(i, j int) bool {
+			return packages[i].Type == "cask" && packages[j].Type != "cask"
+		})
+		return packages, nil
+	}
+
+	// Fallback: legacy text parsing for older brew versions ("name current latest" per line)
+	legacyOut, _ := s.runBrew("outdated")
 	caskList, _ := s.runBrew("list", "--cask")
 	caskSet := make(map[string]bool)
 	for _, caskLine := range strings.Split(strings.TrimSpace(caskList), "\n") {
@@ -321,7 +415,7 @@ func (s *Service) GetOutdated() ([]BrewPackage, error) {
 	}
 
 	packages := make([]BrewPackage, 0)
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(legacyOut), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -334,10 +428,10 @@ func (s *Service) GetOutdated() ([]BrewPackage, error) {
 				Outdated: true,
 			}
 			if len(parts) >= 3 {
-				pkg.Version = parts[2] // current version
+				pkg.Version = parts[1]       // current version
+				pkg.LatestVersion = parts[2] // latest version
 			}
 
-			// Detect cask vs formula
 			if caskSet[parts[0]] {
 				pkg.Type = "cask"
 			} else {
@@ -348,12 +442,23 @@ func (s *Service) GetOutdated() ([]BrewPackage, error) {
 		}
 	}
 
-	// Sort: casks first, then formulas (stable, keeps brew's original order within each type)
+	// Sort: casks first, then formulas
 	sort.SliceStable(packages, func(i, j int) bool {
 		return packages[i].Type == "cask" && packages[j].Type != "cask"
 	})
+	s.enrichDescriptions(packages)
 
 	return packages, nil
+}
+
+// enrichDescriptions fills in package descriptions from the installed info map
+func (s *Service) enrichDescriptions(packages []BrewPackage) {
+	descMap := s.getInstalledDescriptions()
+	for i := range packages {
+		if packages[i].Description == "" {
+			packages[i].Description = descMap[packages[i].Name]
+		}
+	}
 }
 
 // Cleanup removes old versions and cached downloads

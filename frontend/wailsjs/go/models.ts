@@ -3,6 +3,7 @@ export namespace main {
 	export class BrewPackage {
 	    name: string;
 	    version: string;
+	    latest_version?: string;
 	    description: string;
 	    type: string;
 	    outdated: boolean;
@@ -18,6 +19,7 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.version = source["version"];
+	        this.latest_version = source["latest_version"];
 	        this.description = source["description"];
 	        this.type = source["type"];
 	        this.outdated = source["outdated"];
