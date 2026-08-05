@@ -651,6 +651,7 @@ body {
 
 #tab-dashboard .dashboard-row {
   flex-shrink: 1;
+  flex-grow: 1;
   min-height: 0;
 }
 
