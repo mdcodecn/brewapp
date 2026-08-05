@@ -13,7 +13,7 @@
 
 ### 2.1 概览（Dashboard）
 - 已安装包总数、Cask 数、Formula 数统计卡片
-- 可更新包数量及入口
+- 待更新包数量及入口
 - Brew 版本信息
 - 磁盘使用概览（Cellar、Caskroom、Cache）
 - 最近操作记录
@@ -29,13 +29,13 @@
 - 显示搜索结果：名称、版本、类型、描述、是否已安装
 - 未安装的包可直接安装
 
-### 2.4 可更新（Outdated）
-- 列出所有可更新的包
+### 2.4 更新（Outdated）
+- 列出所有待更新的包
 - 支持单个更新和全部更新
 
 ### 2.5 设置（Settings）
 - Brew 版本信息
-- Taps 列表
+- 仓库列表
 - 磁盘使用详情
 - 导出/导入配置
 - 清理缓存
@@ -64,11 +64,11 @@
 | `Search(query)` | `[]SearchResult` | 搜索包 |
 | `Install(name, type)` | error | 安装包 |
 | `Uninstall(name, type)` | error | 卸载包 |
-| `GetOutdated()` | `[]Package` | 获取可更新包 |
+| `GetOutdated()` | `[]Package` | 获取待更新包 |
 | `Upgrade(name)` | error | 更新指定包或全部 |
 | `Cleanup()` | error | 清理缓存 |
 | `GetStats()` | map | 获取统计信息 |
-| `GetTaps()` | []string | 获取 taps |
+| `GetTaps()` | []string | 获取仓库 |
 | `GetDiskUsage()` | map | 磁盘使用 |
 | `ExportConfig(path)` | error | 导出配置 |
 
@@ -105,7 +105,7 @@ type SearchResult struct {
 │  │ · 概览         │  │  │  内容区域   │  │
 │  │ · 已安装       │  │  │            │  │
 │  │ · 搜索         │  │  │            │  │
-│  │ · 可更新       │  │  │            │  │
+│  │ · 更新         │  │  │            │  │
 │  │ · 设置         │  │  │            │  │
 │  ├───────────────┤  │  │            │  │
 │  │ Brew Version  │  │  └────────────┘  │

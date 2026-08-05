@@ -78,6 +78,10 @@ export function GetVulns() {
   return window['go']['main']['Service']['GetVulns']();
 }
 
+export function ImportConfig() {
+  return window['go']['main']['Service']['ImportConfig']();
+}
+
 export function Install(arg1, arg2) {
   return window['go']['main']['Service']['Install'](arg1, arg2);
 }

@@ -85,6 +85,9 @@ function showModal(title, body, onConfirm) {
 window.closeModal = closeModal;
 function closeModal() {
     document.getElementById('modal-overlay').style.display = 'none';
+    // Reset any size class applied by showModalLoading (e.g. 'modal-lg')
+    const modalEl = document.getElementById('modal-overlay').querySelector('.modal');
+    if (modalEl) modalEl.className = 'modal';
 }
 
 // ===== Package Detail Modal =====
@@ -425,10 +428,10 @@ const DISK_ICONS = {
     trash: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
 };
 const DISK_INFO = {
-    'Cellar':           { name: 'Cellar 安装目录', sub: '命令行工具（Formula）存放位置', icon: 'box' },
+    'Cellar':           { name: 'Cellar 安装目录', sub: '命令行（Formula）存放位置', icon: 'box' },
     'Caskroom':         { name: 'Caskroom 安装目录', sub: '图形应用（Cask）存放位置', icon: 'app' },
     'Cache':            { name: '缓存目录', sub: 'Homebrew 下载缓存', icon: 'trash' },
-    'Cellar (Intel)':   { name: 'Cellar 安装目录（Intel）', sub: '命令行工具（Formula）存放位置', icon: 'box' },
+    'Cellar (Intel)':   { name: 'Cellar 安装目录（Intel）', sub: '命令行（Formula）存放位置', icon: 'box' },
     'Caskroom (Intel)': { name: 'Caskroom 安装目录（Intel）', sub: '图形应用（Cask）存放位置', icon: 'app' },
     'Cache (Intel)':    { name: '缓存目录（Intel）', sub: 'Homebrew 下载缓存', icon: 'trash' },
 };
@@ -585,14 +588,18 @@ function renderOutdatedPreview(outdated, loaded) {
     }
 
     const top = outdated.slice(0, 5);
-    container.innerHTML = top.map((p, i) => `
+    container.innerHTML = top.map((p, i) => {
+        const icon = p.type === 'cask' ? CASK_ICON : FORMULA_ICON;
+        const iconCls = p.type === 'cask' ? 'pkg-icon-cask' : 'pkg-icon-formula';
+        return `
         <div class="outdated-item" style="animation-delay:${i * 0.05}s;">
-            <div class="pkg-icon pkg-icon-outdated pkg-icon-sm">${OUTDATED_ICON}</div>
+            <div class="pkg-icon ${iconCls} pkg-icon-sm">${icon}</div>
             <span class="outdated-name" title="${escapeHtml(p.description || p.name)}">${escapeHtml(p.name)}</span>
             ${p.version ? `<span class="outdated-version">${escapeHtml(p.version)}</span>` : ''}
             ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="outdated-version outdated-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
             <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
-        </div>`).join('')
+        </div>`;
+    }).join('')
         + (outdated.length > 5 ? `
         <button class="outdated-more" onclick="switchTab('outdated')">
             查看全部 ${outdated.length} 个
@@ -645,7 +652,7 @@ async function refreshInstalled(type) {
         tabCache.installed.data = packages;
         tabCache.installed.timestamp = Date.now();
         renderInstalled(type, packages);
-        showToast(type === 'cask' ? '应用列表已刷新' : '工具列表已刷新', 'success');
+        showToast(type === 'cask' ? '应用列表已刷新' : '命令行列表已刷新', 'success');
     } catch (err) {
         showToast('刷新失败: ' + err.message, 'error');
     }
@@ -661,7 +668,7 @@ async function refreshOutdated() {
         tabCache.outdated.data = outdated;
         tabCache.outdated.timestamp = Date.now();
         renderOutdated(outdated);
-        showToast('可更新列表已刷新', 'success');
+        showToast('更新列表已刷新', 'success');
     } catch (err) {
         showToast('刷新失败: ' + err.message, 'error');
     }
@@ -706,12 +713,12 @@ function renderInstalled(type, packages) {
             container.innerHTML = emptyStateHTML(
                 SEARCH_OFF_ICON,
                 '未找到匹配的包',
-                `没有名称或描述包含「${search}」的${isCask ? '应用' : '工具'}`
+                `没有名称或描述包含「${search}」的${isCask ? '应用' : '命令行'}`
             );
         } else {
             container.innerHTML = emptyStateHTML(
                 isCask ? CASK_ICON : FORMULA_ICON,
-                isCask ? '尚未安装任何应用' : '尚未安装任何命令行工具',
+                isCask ? '尚未安装任何应用' : '尚未安装任何命令行',
                 '前往「搜索」页面查找并安装软件包'
             );
         }
@@ -728,7 +735,7 @@ function renderInstalled(type, packages) {
                 <span class="pkg-desc">${escapeHtml(p.description || '暂无描述')}</span>
             </div>
             <div class="pkg-actions">
-                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${JSON.stringify(p).replace(/'/g, "&#39;")})">详情</button>
+                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
                 <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${type}')">重装</button>
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${type}')">卸载</button>
             </div>
@@ -817,23 +824,19 @@ function renderSearchResults(results) {
                 <div class="result-name-row">
                     <span class="result-name">${escapeHtml(r.name)}</span>
                     ${r.version ? `<span class="result-version">${escapeHtml(r.version)}</span>` : ''}
-                    <span class="type-badge ${r.type}">${r.type === 'cask' ? '应用' : '公式'}</span>
+                    <span class="type-badge ${r.type}">${r.type === 'cask' ? '应用' : '命令行'}</span>
                 </div>
                 <span class="result-desc">${escapeHtml(r.description || '暂无描述')}</span>
             </div>
             <div class="result-actions">
                 ${r.installed
                     ? `<span class="installed-tag">✓ 已安装</span>
-                       <button class="btn btn-sm btn-secondary" onclick="showDetailFromSearch('${escapeHtml(r.name)}','${r.type}')">详情</button>`
+                       <button class="btn btn-sm btn-secondary" onclick="showDetailModal(${jsonInline({name: r.name, type: r.type})})">详情</button>`
                     : `<button class="btn btn-sm btn-primary" onclick="installPackage('${escapeHtml(r.name)}', '${r.type}')">安装</button>`}
             </div>
         </div>
     `).join('');
 }
-
-window.showDetailFromSearch = function(name, type) {
-    showDetailModal({ name, type });
-};
 
 async function doSearch(query) {
     const container = document.getElementById('search-results');
@@ -953,23 +956,26 @@ function renderOutdated(outdated) {
         return;
     }
 
-    container.innerHTML = filtered.map((p, i) => `
+    container.innerHTML = filtered.map((p, i) => {
+        const icon = p.type === 'cask' ? CASK_ICON : FORMULA_ICON;
+        const iconCls = p.type === 'cask' ? 'pkg-icon-cask' : 'pkg-icon-formula';
+        return `
         <div class="pkg-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
-            <div class="pkg-icon pkg-icon-outdated">${OUTDATED_ICON}</div>
+            <div class="pkg-icon ${iconCls}">${icon}</div>
             <div class="pkg-main">
                 <div class="pkg-name-row">
                     <span class="pkg-name">${escapeHtml(p.name)}</span>
                     ${p.version ? `<span class="pkg-version">${escapeHtml(p.version)}</span>` : ''}
                     ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="pkg-version pkg-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
-                    <span class="type-badge ${escapeHtml(p.type)}">${escapeHtml(p.type === 'cask' ? '应用' : '公式')}</span>
+                    <span class="type-badge ${escapeHtml(p.type)}">${escapeHtml(p.type === 'cask' ? '应用' : '命令行')}</span>
                 </div>
                 ${p.description ? `<span class="pkg-desc">${escapeHtml(p.description)}</span>` : ''}
             </div>
             <div class="pkg-actions">
                 <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
             </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 async function upgradePackage(name) {
@@ -1008,7 +1014,7 @@ window.upgradeAll = upgradeAll;
 async function upgradeAll() {
     showModal(
         '全部更新',
-        '确定要更新所有可更新的包吗？这可能需要较长时间。',
+        '确定要更新所有待更新的包吗？这可能需要较长时间。',
         async () => {
             const btn = document.getElementById('upgrade-all-btn');
             btn.disabled = true;
@@ -1045,10 +1051,65 @@ async function exportConfig() {
             return;
         }
         showToast('配置已导出: ' + path, 'success');
+        setConfigResult('✓ 配置已导出至：' + path, true);
     } catch (err) {
         showToast('导出失败: ' + err.message, 'error');
+        setConfigResult('✗ 导出失败：' + err.message, false);
     }
 }
+
+// Show export/import feedback inside the config page's 备份与恢复 card
+function setConfigResult(message, ok) {
+    const el = document.getElementById('config-transfer-result');
+    if (!el) return;
+    el.className = 'config-result show ' + (ok ? 'config-result-ok' : 'config-result-err');
+    el.textContent = message;
+}
+
+// ===== Import config (restore from a backup file) =====
+window.importConfig = function() {
+    showModalLoading(
+        '导入配置',
+        '将选择一个之前导出的备份文件，并恢复安装其中的全部软件包。\n此操作可能需要较长时间，请耐心等待。',
+        async () => {
+            try {
+                const result = await Service.ImportConfig();
+                if (!result) throw new Error('导入失败');
+                if (result.cancelled) {
+                    return '已取消导入';
+                }
+
+                const ok = result.failed.length === 0;
+                const lines = [`${result.installed.length}/${result.total} 个软件包安装成功`];
+                if (result.failed.length > 0) {
+                    lines.push(`${result.failed.length} 个失败：`);
+                    result.failed.forEach(f => lines.push(`  · ${f.name}: ${f.error}`));
+                }
+                const message = lines.join('\n');
+
+                // Show the same summary inside the config page card
+                setConfigResult(message, ok);
+
+                // Packages changed -> refresh caches
+                markCacheDirty('installed');
+                markCacheDirty('dashboard');
+                markCacheDirty('outdated');
+                tabCache.installed.data = null;
+                tabCache.installed.timestamp = 0;
+                tabCache.dashboard.data = null;
+                tabCache.dashboard.timestamp = 0;
+                tabCache.outdated.data = null;
+                tabCache.outdated.timestamp = 0;
+                installedPackages = [];
+
+                return { message, type: ok ? 'success' : 'error' };
+            } catch (err) {
+                throw new Error(`导入失败: ${err.message}`);
+            }
+        },
+        'modal-lg'
+    );
+};
 
 window.cleanupBrew = cleanupBrew;
 async function cleanupBrew() {
@@ -1098,7 +1159,7 @@ async function autoremoveDeps() {
     );
 }
 
-// ===== Taps Management =====
+// ===== 仓库管理 =====
 async function loadTaps() {
     if (isCacheValid(tabCache.taps)) {
         renderTaps(tabCache.taps.data);
@@ -1155,7 +1216,7 @@ function renderTaps(taps) {
                 <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')">移除</button>
             </div>`;
         }).join('')
-        : emptyStateHTML(TAP_ICON, '暂无 Taps', '在上方输入 tap 名称添加，如 homebrew/cask');
+        : emptyStateHTML(TAP_ICON, '暂无仓库', '在上方输入仓库名称添加，如 homebrew/cask');
 }
 
 window.addTap = addTap;
@@ -1163,30 +1224,30 @@ async function addTap() {
     const input = document.getElementById('tap-input');
     const tap = input.value.trim();
     if (!tap) {
-        showToast('请输入 tap 名称', 'error');
+        showToast('请输入仓库名称', 'error');
         return;
     }
     const btn = input.nextElementSibling;
-    setButtonLoading(btn, true, '添加 Tap');
+    setButtonLoading(btn, true, '添加仓库');
     try {
         await Service.AddTap(tap);
-        showToast(`Tap ${tap} 添加成功`, 'success');
+        showToast(`仓库 ${tap} 添加成功`, 'success');
         input.value = '';
         markCacheDirty('taps');
         tabCache.taps.data = null;
         tabCache.taps.timestamp = 0;
         loadTaps();
     } catch (err) {
-        showToast('添加 Tap 失败: ' + err.message, 'error');
+        showToast('添加仓库失败: ' + err.message, 'error');
     }
-    setButtonLoading(btn, false, '添加 Tap');
+    setButtonLoading(btn, false, '添加仓库');
 }
 
 window.removeTap = removeTap;
 async function removeTap(tap) {
     showModalLoading(
-        '确认移除 Tap',
-        `确定要移除 tap <strong>${escapeHtml(tap)}</strong> 吗？`,
+        '确认移除仓库',
+        `确定要移除仓库 <strong>${escapeHtml(tap)}</strong> 吗？`,
         async () => {
             try {
                 await Service.RemoveTap(tap);
@@ -1194,7 +1255,7 @@ async function removeTap(tap) {
                 tabCache.taps.data = null;
                 tabCache.taps.timestamp = 0;
                 loadTaps();
-                return `Tap ${tap} 已移除`;
+                return `仓库 ${tap} 已移除`;
             } catch (err) {
                 throw new Error(`移除失败: ${err.message}`);
             }
@@ -1208,6 +1269,14 @@ function escapeHtml(str) {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+}
+
+// Serialize an object for use inside an onclick="..." attribute safely.
+// JSON.stringify emits raw double quotes which would truncate the HTML
+// attribute value, so escape both quote characters as entities (the browser
+// decodes them back before executing the inline handler).
+function jsonInline(obj) {
+    return JSON.stringify(obj).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // ===== Button Loading State =====
@@ -1226,13 +1295,21 @@ function setButtonLoading(btn, loading, originalText) {
 }
 
 // ===== Modal with Loading Indicator =====
-function showModalLoading(title, bodyHTML, onConfirm) {
+// modalClassName: optional extra class(es) for the modal (e.g. 'modal-lg')
+function showModalLoading(title, bodyHTML, onConfirm, modalClassName) {
     document.getElementById('modal-title').textContent = title;
     const body = document.getElementById('modal-body');
     body.innerHTML = bodyHTML;
+    const modalEl = document.getElementById('modal-overlay').querySelector('.modal');
+    modalEl.className = 'modal' + (modalClassName ? ' ' + modalClassName : '');
     document.getElementById('modal-overlay').style.display = 'flex';
     const confirmBtn = document.getElementById('modal-confirm');
     const newBtn = confirmBtn.cloneNode(true);
+    // cloneNode copies attributes from the previous run (data-done='1', text '关闭'),
+    // so reset the button to a fresh confirm state
+    newBtn.removeAttribute('data-done');
+    newBtn.textContent = '确认';
+    newBtn.disabled = false;
     confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
     newBtn.addEventListener('click', async () => {
         // After the operation has completed, the button turns into "关闭"
@@ -1244,7 +1321,13 @@ function showModalLoading(title, bodyHTML, onConfirm) {
         newBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> 执行中...';
         try {
             const result = await onConfirm(newBtn);
-            if (result) renderModalResult(body, 'success', result);
+            if (result) {
+                if (typeof result === 'object' && result.message != null) {
+                    renderModalResult(body, result.type || 'success', result.message);
+                } else {
+                    renderModalResult(body, 'success', result);
+                }
+            }
         } catch (err) {
             renderModalResult(body, 'error', err.message || '操作失败');
         } finally {
@@ -1317,9 +1400,10 @@ window.runUpdate = async function() {
         await Service.Update();
         output.textContent += '\n✓ brew update 完成！';
         showToast('更新完成', 'success');
+        // Invalidate the config cache so the 环境信息 card re-fetches brew config
         markCacheDirty('config');
-        tabCache.config.data = output.textContent;
-        tabCache.config.timestamp = Date.now();
+        tabCache.config.data = null;
+        tabCache.config.timestamp = 0;
         // Refresh dashboard and outdated
         tabCache.dashboard.data = null;
         tabCache.dashboard.timestamp = 0;
@@ -1336,34 +1420,23 @@ window.runUpdate = async function() {
     </svg> 执行 brew update`;
 }
 
-// ===== Doctor (in config tab) =====
-window.runDoctor = async function() {
-    const btn = document.getElementById('doctor-btn');
-    const output = document.getElementById('doctor-output');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> 诊断中...';
-    output.textContent = '正在运行 brew doctor...\n';
-
-    try {
-        const result = await Service.Doctor();
-        output.textContent = result || '✓ 系统健康，未发现异常';
-        if (output.textContent.includes('Error') || output.textContent.includes('error')) {
-            showToast('诊断发现警告', 'error');
-        } else {
-            showToast('诊断完成', 'success');
-        }
-        markCacheDirty('config');
-        tabCache.config.data = output.textContent;
-        tabCache.config.timestamp = Date.now();
-    } catch (err) {
-        output.textContent = '诊断失败: ' + err.message;
-        showToast('诊断失败', 'error');
-    }
-    btn.disabled = false;
-    btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
-    </svg> 运行 brew doctor`;
-}
+// ===== Doctor / Vulnerabilities (opened as modals from the dashboard) =====
+// 系统诊断：直接弹框运行 brew doctor，不再跳转配置页
+window.runDoctorQuick = function() {
+    showModalLoading(
+        '系统诊断',
+        '将运行 <code>brew doctor</code> 检查 Homebrew 环境健康状况。\n诊断可能需要一些时间，请稍候。',
+        async () => {
+            try {
+                const result = await Service.Doctor();
+                return result || '✓ 系统健康，未发现异常';
+            } catch (err) {
+                throw new Error(`诊断失败: ${err.message}`);
+            }
+        },
+        'modal-lg'
+    );
+};
 
 // ===== Config =====
 async function loadConfig() {
@@ -1381,45 +1454,21 @@ async function loadConfig() {
     }
 }
 
-// ===== Vulnerabilities (in config tab) =====
-window.runVulns = async function() {
-    const btn = document.getElementById('vulns-btn');
-    const output = document.getElementById('vulns-output');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> 扫描中...';
-    output.textContent = '正在扫描已知安全漏洞...\n';
-
-    try {
-        const result = await Service.GetVulns();
-        output.textContent = result || '✓ 未发现已知安全漏洞';
-        if (output.textContent.includes('Vulnerabilities') && !output.textContent.includes('No vulnerabilities')) {
-            showToast('发现安全漏洞', 'error');
-        } else {
-            showToast('扫描完成，无漏洞', 'success');
-        }
-        markCacheDirty('config');
-        tabCache.config.data = output.textContent;
-        tabCache.config.timestamp = Date.now();
-    } catch (err) {
-        output.textContent = '扫描失败: ' + err.message;
-        showToast('扫描失败', 'error');
-    }
-    btn.disabled = false;
-    btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-    </svg> 扫描漏洞`;
-}
-
-// ===== Quick action: jump to config tab and start the vulnerability scan =====
+// ===== Quick action: run the vulnerability scan in a modal (no tab switch) =====
 window.runVulnsQuick = function() {
-    switchTab('config');
-    setTimeout(() => {
-        const section = document.getElementById('vulns-section');
-        if (!section) return;
-        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        const btn = section.querySelector('.btn-primary');
-        if (btn && !btn.disabled) btn.click();
-    }, 300);
+    showModalLoading(
+        '安全漏洞扫描',
+        '将扫描已安装软件包的已知安全漏洞。\n扫描可能需要一些时间，请稍候。',
+        async () => {
+            try {
+                const result = await Service.GetVulns();
+                return result || '✓ 未发现已知安全漏洞';
+            } catch (err) {
+                throw new Error(`扫描失败: ${err.message}`);
+            }
+        },
+        'modal-lg'
+    );
 };
 
 // ===== Pin / Unpin =====

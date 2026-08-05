@@ -1448,6 +1448,68 @@ body {
   color: #8b5cf6;
 }
 
+/* ===== Config Page (redesigned: two-column layout) ===== */
+.config-layout {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.config-main .settings-section {
+  margin-bottom: 0;
+}
+
+.config-side .settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.output-pre-sm {
+  max-height: 200px;
+}
+
+.config-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+.config-action-row {
+  display: flex;
+  gap: 10px;
+}
+
+.config-action-row .btn {
+  flex: 1;
+}
+
+.config-result {
+  margin-top: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-word;
+  white-space: pre-wrap;
+  display: none;
+}
+
+.config-result.show {
+  display: block;
+  animation: fadeUp 0.25s ease;
+}
+
+.config-result-ok {
+  background: var(--success-dim);
+  color: var(--success);
+}
+
+.config-result-err {
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
 /* ===== Toast ===== */
 .toast-container {
   position: fixed;
@@ -1558,8 +1620,11 @@ body {
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.6;
   word-break: break-word;
+  white-space: pre-wrap;
+  max-height: 340px;
+  overflow-y: auto;
 }
 
 .modal-result-success {
@@ -1880,5 +1945,9 @@ body {
 
   .quick-actions {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .config-layout {
+    grid-template-columns: 1fr;
   }
 }

@@ -40,6 +40,8 @@ export function GetVersion():Promise<string>;
 
 export function GetVulns():Promise<string>;
 
+export function ImportConfig():Promise<main.ImportResult>;
+
 export function Install(arg1:string,arg2:string):Promise<void>;
 
 export function Link(arg1:string):Promise<void>;

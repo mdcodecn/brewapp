@@ -617,6 +617,133 @@ func (s *Service) ExportConfig() (string, error) {
 	return path, nil
 }
 
+// ImportResult describes the outcome of restoring a config backup
+// (which packages were installed successfully and which failed).
+type ImportResult struct {
+	Path      string          `json:"path"`
+	Cancelled bool            `json:"cancelled"`
+	Total     int             `json:"total"`
+	Installed []string        `json:"installed"`
+	Failed    []ImportFailure `json:"failed"`
+}
+
+// ImportFailure records a single package that could not be installed
+// during an import.
+type ImportFailure struct {
+	Name  string `json:"name"`
+	Error string `json:"error"`
+}
+
+// ImportConfig opens a native file dialog, reads a previously exported backup
+// and reinstalls every package listed in it (casks and formulas).
+// Returns ImportResult{Cancelled: true} when the user cancels the dialog.
+func (s *Service) ImportConfig() (*ImportResult, error) {
+	if s.ctx == nil {
+		return nil, fmt.Errorf("runtime context not ready")
+	}
+
+	path, err := runtime.OpenFileDialog(s.ctx, runtime.OpenDialogOptions{
+		Title: "选择 Brew 配置备份文件",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Text Files (*.txt)", Pattern: "*.txt"},
+			{DisplayName: "All Files (*.*)", Pattern: "*.*"},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file dialog: %w", err)
+	}
+	if path == "" {
+		// User cancelled the dialog
+		return &ImportResult{Cancelled: true}, nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	casks, formulas := parseConfigBackup(string(data))
+	result := &ImportResult{
+		Path:      path,
+		Total:     len(casks) + len(formulas),
+		Installed: make([]string, 0),
+		Failed:    make([]ImportFailure, 0),
+	}
+
+	installOne := func(name, pkgType string) {
+		args := []string{"install"}
+		if pkgType == "cask" {
+			args = append(args, "--cask")
+		}
+		args = append(args, name)
+		if _, err := s.runBrew(args...); err != nil {
+			result.Failed = append(result.Failed, ImportFailure{Name: name, Error: err.Error()})
+			return
+		}
+		result.Installed = append(result.Installed, name)
+	}
+
+	// Formulas first (usually faster), then casks
+	for _, name := range formulas {
+		installOne(name, "formula")
+	}
+	for _, name := range casks {
+		installOne(name, "cask")
+	}
+
+	return result, nil
+}
+
+// parseConfigBackup extracts cask and formula names from an exported backup.
+// Supported formats:
+//
+//	# Brew Manager Export
+//	## Casks
+//	<names>
+//	## Formulas
+//	<names>
+//
+// as well as raw "brew list" output (space/newline separated names, treated
+// as formulas by default). Comment lines (#, ==>) and empty lines are ignored.
+func parseConfigBackup(content string) (casks, formulas []string) {
+	section := "formula" // default: plain brew list output contains formulas
+	seen := make(map[string]bool)
+	add := func(list *[]string, token string) {
+		if seen[token] {
+			return
+		}
+		seen[token] = true
+		*list = append(*list, token)
+	}
+
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		lower := strings.ToLower(line)
+		if strings.HasPrefix(lower, "## casks") {
+			section = "cask"
+			continue
+		}
+		if strings.HasPrefix(lower, "## formulas") {
+			section = "formula"
+			continue
+		}
+		if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "==>") {
+			continue
+		}
+		for _, token := range strings.Fields(line) {
+			if section == "cask" {
+				add(&casks, token)
+			} else {
+				add(&formulas, token)
+			}
+		}
+	}
+	return casks, formulas
+}
+
 // GetDependencies returns the dependencies for a package
 func (s *Service) GetDependencies(name string) ([]string, error) {
 	jsonOutput, err := s.runBrew("info", "--json=v2", name)
