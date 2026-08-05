@@ -738,35 +738,44 @@ body {
 .view-all {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 5px;
   margin-left: auto;
-  padding: 3px 5px 3px 12px;
-  border-radius: 999px;
+  padding: 2px 6px;
+  border-radius: 6px;
   background: transparent;
-  color: var(--accent);
+  color: var(--text-muted);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 400;
   font-family: inherit;
   cursor: pointer;
-  transition: background-color 0.12s ease;
+  transition: color 0.12s ease;
 }
 
 .view-all:hover {
-  background: var(--accent-dim);
+  color: var(--text-secondary);
 }
 
+/* 细小的右箭头，悬停时出现，提示可点击（不喧宾夺主） */
+.view-all::after {
+  content: '›';
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0;
+  transform: translateX(-2px);
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.view-all:hover::after {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* 数量改为朴素文字，不再用高亮徽标 */
 .view-all-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 20px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+  color: var(--text-muted);
+  font-size: 12px;
   line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 .disk-total {

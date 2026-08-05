@@ -921,7 +921,6 @@ function renderOutdated(outdated) {
                     <span class="pkg-name">${escapeHtml(p.name)}</span>
                     ${p.version ? `<span class="pkg-version">${escapeHtml(p.version)}</span>` : ''}
                     ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="pkg-version pkg-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
-                    <span class="type-badge ${escapeHtml(p.type)}">${escapeHtml(p.type === 'cask' ? '应用' : '命令行')}</span>
                 </div>
                 ${p.description ? `<span class="pkg-desc">${escapeHtml(p.description)}</span>` : ''}
             </div>
