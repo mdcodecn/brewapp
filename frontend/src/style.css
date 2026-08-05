@@ -83,7 +83,8 @@ body {
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
-  background: var(--bg-secondary);
+  /* 调淡：由纯白 #ffffff 改为更柔和的浅色调，整体更轻盈 */
+  background: #f2f2f7;
   display: flex;
   flex-direction: column;
   user-select: none;
@@ -202,6 +203,11 @@ body {
   align-items: center;
   gap: 11px;
   padding: 8px 12px;
+  /* 固定行高：数量徽标（display:none ↔ inline）出现/消失时不会改变行高，
+     避免侧边栏加载数量后整列条目被撑高、下方条目发生位移 */
+  min-height: 35px;
+  white-space: nowrap;
+  overflow: hidden;
   background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
@@ -253,6 +259,8 @@ body {
 
 .nav-item .badge {
   margin-left: auto;
+  /* 徽标不参与收缩，避免数字变大时挤压/换行改变布局 */
+  flex-shrink: 0;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   font-size: 10px;
