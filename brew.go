@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 
@@ -192,12 +193,11 @@ func (s *Service) Search(query string) ([]BrewSearchResult, error) {
 		}
 	}
 
-	// Search formulas
-	formulaResults, _ := s.searchFormulae(query, installedSet)
-	// Search casks
+	// Search casks first, then formulas
 	caskResults, _ := s.searchCasks(query, installedSet)
+	formulaResults, _ := s.searchFormulae(query, installedSet)
 
-	return append(formulaResults, caskResults...), nil
+	return append(caskResults, formulaResults...), nil
 }
 
 // searchFormulae searches for formulae matching the query
@@ -347,6 +347,11 @@ func (s *Service) GetOutdated() ([]BrewPackage, error) {
 			packages = append(packages, pkg)
 		}
 	}
+
+	// Sort: casks first, then formulas (stable, keeps brew's original order within each type)
+	sort.SliceStable(packages, func(i, j int) bool {
+		return packages[i].Type == "cask" && packages[j].Type != "cask"
+	})
 
 	return packages, nil
 }
@@ -765,6 +770,11 @@ func (s *Service) GetOutdatedWithVersion() ([]BrewPackage, error) {
 			packages = append(packages, pkg)
 		}
 	}
+
+	// Sort: casks first, then formulas (stable, keeps brew's original order within each type)
+	sort.SliceStable(packages, func(i, j int) bool {
+		return packages[i].Type == "cask" && packages[j].Type != "cask"
+	})
 
 	return packages, nil
 }

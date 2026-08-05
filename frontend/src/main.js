@@ -225,9 +225,11 @@ const tabCache = {
 
 // Pre-load installed packages on startup for instant tab switch
 let installedPackages = [];
+let installedLoaded = false;
 (async () => {
     try {
         installedPackages = await Service.ListInstalled();
+        installedLoaded = true;
         tabCache.installed.data = installedPackages;
         tabCache.installed.timestamp = Date.now();
     } catch (err) {
@@ -433,6 +435,23 @@ const DISK_INFO = {
 // Go map 序列化后键顺序不固定，按固定顺序展示
 const DISK_ORDER = ['Cellar', 'Caskroom', 'Cache', 'Cellar (Intel)', 'Caskroom (Intel)', 'Cache (Intel)'];
 
+// ===== Shared icons (inline SVG, sized for list rows) =====
+const CASK_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`;
+const FORMULA_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
+const OUTDATED_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
+const CHECK_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
+const SEARCH_OFF_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="8" x2="14" y2="14"/><line x1="14" y1="8" x2="8" y2="14"/></svg>`;
+const TAP_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
+
+// Nicer empty-state block with an icon, title and optional hint
+function emptyStateHTML(icon, title, sub) {
+    return `<div class="empty-state-box">
+        <div class="empty-state-icon">${icon}</div>
+        <div class="empty-state-title">${escapeHtml(title)}</div>
+        ${sub ? `<div class="empty-state-sub">${escapeHtml(sub)}</div>` : ''}
+    </div>`;
+}
+
 function renderDashboard(data) {
     const { packages, outdated, diskUsage } = data;
 
@@ -595,6 +614,7 @@ async function loadInstalledInBackground(type) {
     try {
         const packages = await Service.ListInstalled();
         installedPackages = packages;
+        installedLoaded = true;
         tabCache.installed.data = packages;
         tabCache.installed.timestamp = Date.now();
         if (currentTab === 'installed-cask' || currentTab === 'installed-formula') {
@@ -605,9 +625,51 @@ async function loadInstalledInBackground(type) {
     }
 }
 
+function spinRefreshBtn(btn, on) {
+    if (!btn) return;
+    btn.classList.toggle('refreshing', on);
+    btn.disabled = on;
+}
+
+window.refreshInstalled = refreshInstalled;
+async function refreshInstalled(type) {
+    const btn = document.getElementById(type === 'cask' ? 'installed-cask-refresh' : 'installed-formula-refresh');
+    spinRefreshBtn(btn, true);
+    try {
+        const packages = await Service.ListInstalled();
+        installedPackages = packages;
+        installedLoaded = true;
+        tabCache.installed.data = packages;
+        tabCache.installed.timestamp = Date.now();
+        renderInstalled(type, packages);
+        showToast(type === 'cask' ? '应用列表已刷新' : '工具列表已刷新', 'success');
+    } catch (err) {
+        showToast('刷新失败: ' + err.message, 'error');
+    }
+    spinRefreshBtn(btn, false);
+}
+
+window.refreshOutdated = refreshOutdated;
+async function refreshOutdated() {
+    const btn = document.getElementById('outdated-refresh');
+    spinRefreshBtn(btn, true);
+    try {
+        const outdated = await Service.GetOutdated();
+        tabCache.outdated.data = outdated;
+        tabCache.outdated.timestamp = Date.now();
+        renderOutdated(outdated);
+        showToast('可更新列表已刷新', 'success');
+    } catch (err) {
+        showToast('刷新失败: ' + err.message, 'error');
+    }
+    spinRefreshBtn(btn, false);
+}
+
 function renderInstalled(type, packages) {
     const searchInputId = type === 'cask' ? 'installed-cask-search' : 'installed-formula-search';
     const containerId = type === 'cask' ? 'cask-list' : 'formula-list';
+    const countId = type === 'cask' ? 'cask-page-count' : 'formula-page-count';
+    const isCask = type === 'cask';
     const search = document.getElementById(searchInputId).value.toLowerCase();
     const filtered = packages.filter(p => {
         if (p.type !== type) return false;
@@ -616,28 +678,52 @@ function renderInstalled(type, packages) {
                (p.description && p.description.toLowerCase().includes(search));
     });
 
+    // Live count pill next to the heading
+    const countEl = document.getElementById(countId);
+    if (countEl) countEl.textContent = filtered.length + ' 个';
+
     const container = document.getElementById(containerId);
     if (filtered.length === 0) {
-        if (packages.length === 0) {
+        if (packages.length === 0 && !installedLoaded) {
             // Still loading — show skeletons
             container.innerHTML = Array.from({length: 5}, () => `
                 <div class="skeleton-row">
-                    <div class="skeleton sk-name"></div>
-                    <div class="skeleton sk-version"></div>
-                    <div class="skeleton sk-desc"></div>
+                    <div class="skeleton sk-icon"></div>
+                    <div class="skeleton-row-main">
+                        <div class="skeleton-row-line">
+                            <div class="skeleton sk-name"></div>
+                            <div class="skeleton sk-version"></div>
+                        </div>
+                        <div class="skeleton sk-desc"></div>
+                    </div>
                     <div class="skeleton sk-badge"></div>
                 </div>
             `).join('');
+        } else if (search) {
+            container.innerHTML = emptyStateHTML(
+                SEARCH_OFF_ICON,
+                '未找到匹配的包',
+                `没有名称或描述包含「${search}」的${isCask ? '应用' : '工具'}`
+            );
         } else {
-            container.innerHTML = '<p class="empty-state">暂无数据</p>';
+            container.innerHTML = emptyStateHTML(
+                isCask ? CASK_ICON : FORMULA_ICON,
+                isCask ? '尚未安装任何应用' : '尚未安装任何命令行工具',
+                '前往「搜索」页面查找并安装软件包'
+            );
         }
         return;
     }
-    container.innerHTML = filtered.map(p => `
-        <div class="pkg-item">
-            <span class="pkg-name">${escapeHtml(p.name)}</span>
-            <span class="pkg-version">${escapeHtml(p.version || '-')}</span>
-            <span class="pkg-desc">${escapeHtml(p.description || '-')}</span>
+    container.innerHTML = filtered.map((p, i) => `
+        <div class="pkg-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
+            <div class="pkg-icon pkg-icon-${type}">${isCask ? CASK_ICON : FORMULA_ICON}</div>
+            <div class="pkg-main">
+                <div class="pkg-name-row">
+                    <span class="pkg-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    <span class="pkg-version">${escapeHtml(p.version || '-')}</span>
+                </div>
+                <span class="pkg-desc">${escapeHtml(p.description || '暂无描述')}</span>
+            </div>
             <div class="pkg-actions">
                 <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${JSON.stringify(p).replace(/'/g, "&#39;")})">详情</button>
                 <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${type}')">重装</button>
@@ -705,19 +791,33 @@ let searchTimeout = null;
 
 function renderSearchResults(results) {
     const container = document.getElementById('search-results');
+    const countEl = document.getElementById('search-result-count');
     if (!container) return;
 
     if (!results || results.length === 0) {
-        container.innerHTML = '<div class="empty-state">未找到匹配的包</div>';
+        container.innerHTML = emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试，如 git、google-chrome');
+        if (countEl) countEl.style.display = 'none';
         return;
     }
 
-    container.innerHTML = results.slice(0, 50).map(r => `
-        <div class="result-item">
-            <div class="result-name">${escapeHtml(r.name)}</div>
-            <span class="type-badge ${r.type}">${r.type === 'cask' ? '应用' : '公式'}</span>
-            <div class="result-version">${escapeHtml(r.version || '')}</div>
-            <div class="result-desc">${escapeHtml(r.description || '暂无描述')}</div>
+    if (countEl) {
+        countEl.style.display = 'inline-flex';
+        countEl.textContent = results.length > 50
+            ? `共 ${results.length} 个结果，显示前 50`
+            : `${results.length} 个结果`;
+    }
+
+    container.innerHTML = results.slice(0, 50).map((r, i) => `
+        <div class="result-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
+            <div class="result-icon result-icon-${r.type}">${r.type === 'cask' ? CASK_ICON : FORMULA_ICON}</div>
+            <div class="result-main">
+                <div class="result-name-row">
+                    <span class="result-name">${escapeHtml(r.name)}</span>
+                    ${r.version ? `<span class="result-version">${escapeHtml(r.version)}</span>` : ''}
+                    <span class="type-badge ${r.type}">${r.type === 'cask' ? '应用' : '公式'}</span>
+                </div>
+                <span class="result-desc">${escapeHtml(r.description || '暂无描述')}</span>
+            </div>
             <div class="result-actions">
                 ${r.installed
                     ? `<span class="installed-tag">✓ 已安装</span>
@@ -736,6 +836,8 @@ async function doSearch(query) {
     const container = document.getElementById('search-results');
     if (!container) return;
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 搜索中...</div>';
+    const countEl = document.getElementById('search-result-count');
+    if (countEl) countEl.style.display = 'none';
 
     try {
         const results = await Service.Search(query);
@@ -752,6 +854,8 @@ window.debounceSearch = function() {
     const query = input.value.trim();
     if (!query) {
         document.getElementById('search-results').innerHTML = '';
+        const countEl = document.getElementById('search-result-count');
+        if (countEl) countEl.style.display = 'none';
         return;
     }
     searchTimeout = setTimeout(() => doSearch(query), 300);
@@ -833,19 +937,30 @@ function renderOutdated(outdated) {
                (p.description && p.description.toLowerCase().includes(search));
     });
 
+    // Live count pill + enable/disable bulk upgrade
+    const countEl = document.getElementById('outdated-page-count');
+    if (countEl) countEl.textContent = filtered.length + ' 个';
+    const upgradeAllBtn = document.getElementById('upgrade-all-btn');
+    if (upgradeAllBtn) upgradeAllBtn.disabled = outdated.length === 0;
+
     if (filtered.length === 0) {
         container.innerHTML = outdated.length === 0
-            ? '<p class="empty-state">所有包都是最新的 ✓</p>'
-            : '<p class="empty-state">未找到匹配的包</p>';
+            ? emptyStateHTML(CHECK_ICON, '所有包都是最新的', '没有可用的更新')
+            : emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试');
         return;
     }
 
-    container.innerHTML = filtered.map(p => `
-        <div class="pkg-item">
-            <span class="pkg-name">${escapeHtml(p.name)}</span>
-            <span class="pkg-version">${escapeHtml(p.version || '-')}</span>
-            <span class="type-badge ${escapeHtml(p.type)}">${escapeHtml(p.type)}</span>
-            <span class="pkg-desc"></span>
+    container.innerHTML = filtered.map((p, i) => `
+        <div class="pkg-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
+            <div class="pkg-icon pkg-icon-outdated">${OUTDATED_ICON}</div>
+            <div class="pkg-main">
+                <div class="pkg-name-row">
+                    <span class="pkg-name">${escapeHtml(p.name)}</span>
+                    <span class="pkg-version">当前 ${escapeHtml(p.version || '-')}</span>
+                    <span class="type-badge ${escapeHtml(p.type)}">${escapeHtml(p.type === 'cask' ? '应用' : '公式')}</span>
+                </div>
+                <span class="pkg-desc">检测到可用更新，点击右侧按钮升级</span>
+            </div>
             <div class="pkg-actions">
                 <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
             </div>
@@ -1020,15 +1135,23 @@ function renderTaps(taps) {
         tapBadge.style.display = 'none';
     }
 
+    const pageCount = document.getElementById('tap-page-count');
+    if (pageCount) pageCount.textContent = taps.length + ' 个';
+
     document.getElementById('taps-list').innerHTML = taps.length > 0
-        ? taps.map(t => {
+        ? taps.map((t, i) => {
             const tapName = t.split(' ')[0];
-            return `<div class="tap-item">
-                <span class="tap-name">${escapeHtml(tapName)}</span>
-                <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')" style="padding:2px 8px;font-size:11px;">移除</button>
+            const rest = t.slice(tapName.length).trim();
+            return `<div class="tap-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
+                <div class="tap-icon">${TAP_ICON}</div>
+                <div class="tap-main">
+                    <span class="tap-name" title="${escapeHtml(t)}">${escapeHtml(tapName)}</span>
+                    ${rest ? `<span class="tap-desc">${escapeHtml(rest)}</span>` : ''}
+                </div>
+                <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')">移除</button>
             </div>`;
         }).join('')
-        : '<p class="empty-state" style="padding:12px;">暂无 taps</p>';
+        : emptyStateHTML(TAP_ICON, '暂无 Taps', '在上方输入 tap 名称添加，如 homebrew/cask');
 }
 
 window.addTap = addTap;
@@ -1211,7 +1334,7 @@ window.runUpdate = async function() {
 
 // ===== Doctor (in config tab) =====
 window.runDoctor = async function() {
-    const btn = document.querySelector('#tab-config .settings-section:nth-of-type(2) .btn-primary');
+    const btn = document.getElementById('doctor-btn');
     const output = document.getElementById('doctor-output');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> 诊断中...';
@@ -1256,7 +1379,7 @@ async function loadConfig() {
 
 // ===== Vulnerabilities (in config tab) =====
 window.runVulns = async function() {
-    const btn = document.querySelector('#tab-config .settings-section:nth-of-type(3) .btn-primary');
+    const btn = document.getElementById('vulns-btn');
     const output = document.getElementById('vulns-output');
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner"></span> 扫描中...';

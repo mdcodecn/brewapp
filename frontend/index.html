@@ -225,7 +225,13 @@
             <!-- Search -->
             <div class="tab-content" id="tab-search">
                 <div class="search-page">
-                    <h1 class="search-page-title">搜索 Homebrew 包</h1>
+                    <div class="page-heading">
+                        <div class="page-heading-text">
+                            <h1>搜索</h1>
+                            <p class="page-subtitle">在 Homebrew 仓库中查找并安装软件包</p>
+                        </div>
+                        <span class="count-badge" id="search-result-count" style="display:none;"></span>
+                    </div>
                     <input type="text" id="search-input" class="search-input search-input-lg" placeholder="输入包名，如: git、google-chrome…" autocomplete="off">
                     <div id="search-results" class="results-list"></div>
                 </div>
@@ -233,9 +239,22 @@
 
             <!-- Installed Cask -->
             <div class="tab-content" id="tab-installed-cask">
-                <div class="page-header">
-                    <input type="text" id="installed-cask-search" class="search-input" placeholder="搜索..." oninput="filterInstalled('cask')">
+                <div class="page-heading">
+                    <div class="page-heading-text">
+                        <h1>应用容器</h1>
+                        <p class="page-subtitle">已安装的图形应用（Cask）</p>
+                    </div>
+                    <div class="page-heading-actions">
+                        <span class="count-badge count-badge-blue" id="cask-page-count">0 个</span>
+                        <button class="btn btn-secondary btn-icon-only btn-refresh" id="installed-cask-refresh" onclick="refreshInstalled('cask')" title="刷新列表">
+                            <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
+                <input type="text" id="installed-cask-search" class="search-input list-search" placeholder="搜索已安装的应用…" oninput="filterInstalled('cask')">
                 <div id="cask-list" class="pkg-list">
                     <div class="loading-state"><span class="spinner"></span> 加载中...</div>
                 </div>
@@ -243,9 +262,22 @@
 
             <!-- Installed Formula -->
             <div class="tab-content" id="tab-installed-formula">
-                <div class="page-header">
-                    <input type="text" id="installed-formula-search" class="search-input" placeholder="搜索..." oninput="filterInstalled('formula')">
+                <div class="page-heading">
+                    <div class="page-heading-text">
+                        <h1>命令行工具</h1>
+                        <p class="page-subtitle">已安装的命令行工具（Formula）</p>
+                    </div>
+                    <div class="page-heading-actions">
+                        <span class="count-badge count-badge-green" id="formula-page-count">0 个</span>
+                        <button class="btn btn-secondary btn-icon-only btn-refresh" id="installed-formula-refresh" onclick="refreshInstalled('formula')" title="刷新列表">
+                            <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
+                <input type="text" id="installed-formula-search" class="search-input list-search" placeholder="搜索已安装的工具…" oninput="filterInstalled('formula')">
                 <div id="formula-list" class="pkg-list">
                     <div class="loading-state"><span class="spinner"></span> 加载中...</div>
                 </div>
@@ -253,15 +285,28 @@
 
             <!-- Outdated -->
             <div class="tab-content" id="tab-outdated">
-                <div class="page-header">
-                    <input type="text" id="outdated-search" class="search-input" placeholder="搜索..." oninput="filterOutdated()">
-                    <button class="btn btn-primary" id="upgrade-all-btn" onclick="upgradeAll()">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-                        </svg>
-                        全部更新
-                    </button>
+                <div class="page-heading">
+                    <div class="page-heading-text">
+                        <h1>可更新</h1>
+                        <p class="page-subtitle">有可用新版本的软件包</p>
+                    </div>
+                    <div class="page-heading-actions">
+                        <span class="count-badge count-badge-orange" id="outdated-page-count">0 个</span>
+                        <button class="btn btn-secondary btn-icon-only btn-refresh" id="outdated-refresh" onclick="refreshOutdated()" title="刷新列表">
+                            <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                            </svg>
+                        </button>
+                        <button class="btn btn-primary" id="upgrade-all-btn" onclick="upgradeAll()">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+                            </svg>
+                            全部更新
+                        </button>
+                    </div>
                 </div>
+                <input type="text" id="outdated-search" class="search-input list-search" placeholder="搜索可更新的包…" oninput="filterOutdated()">
                 <div id="outdated-list" class="pkg-list">
                     <div class="loading-state"><span class="spinner"></span> 加载中...</div>
                 </div>
@@ -269,29 +314,48 @@
 
             <!-- Taps Management -->
             <div class="tab-content" id="tab-taps">
-                <div class="page-header"></div>
+                <div class="page-heading">
+                    <div class="page-heading-text">
+                        <h1>Taps</h1>
+                        <p class="page-subtitle">管理 Homebrew 软件源（Tap 仓库）</p>
+                    </div>
+                    <span class="count-badge" id="tap-page-count">0 个</span>
+                </div>
                 <div class="settings-section">
                     <div class="tap-add-row">
                         <input type="text" id="tap-input" class="search-input" placeholder="输入 tap 名称，如: homebrew/cask">
                         <button class="btn btn-primary" onclick="addTap()">添加 Tap</button>
                     </div>
-                    <div id="taps-list" class="tap-list" style="margin-top:12px;"></div>
+                    <div id="taps-list" class="tap-list" style="margin-top:14px;"></div>
                 </div>
             </div>
 
             <!-- Config (includes Update, Doctor, Vulnerabilities) -->
             <div class="tab-content" id="tab-config">
-                <div class="page-header"></div>
+                <div class="page-heading">
+                    <div class="page-heading-text">
+                        <h1>配置</h1>
+                        <p class="page-subtitle">Homebrew 环境配置、更新与诊断</p>
+                    </div>
+                </div>
 
                 <!-- Brew Config -->
                 <div class="settings-section">
-                    <h2>Brew 配置</h2>
+                    <h2 class="settings-heading">
+                        <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        Brew 配置
+                        <span class="settings-heading-desc">brew config 输出</span>
+                    </h2>
                     <pre id="config-output" class="output-pre">加载中...</pre>
                 </div>
 
                 <!-- Update -->
                 <div class="settings-section">
-                    <h2>Homebrew 更新</h2>
+                    <h2 class="settings-heading">
+                        <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                        Homebrew 更新
+                        <span class="settings-heading-desc">更新 Homebrew 本体与仓库索引</span>
+                    </h2>
                     <button class="btn btn-primary" id="update-btn" onclick="runUpdate()">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -304,8 +368,12 @@
 
                 <!-- Doctor -->
                 <div class="settings-section">
-                    <h2>系统诊断</h2>
-                    <button class="btn btn-primary" onclick="runDoctor()">
+                    <h2 class="settings-heading">
+                        <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        系统诊断
+                        <span class="settings-heading-desc">检查 Homebrew 环境健康状况</span>
+                    </h2>
+                    <button class="btn btn-primary" id="doctor-btn" onclick="runDoctor()">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
                         </svg>
@@ -316,8 +384,12 @@
 
                 <!-- Vulnerabilities -->
                 <div class="settings-section" id="vulns-section">
-                    <h2>安全漏洞扫描</h2>
-                    <button class="btn btn-primary" onclick="runVulns()">
+                    <h2 class="settings-heading">
+                        <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
+                        安全漏洞扫描
+                        <span class="settings-heading-desc">扫描已知安全漏洞</span>
+                    </h2>
+                    <button class="btn btn-primary" id="vulns-btn" onclick="runVulns()">
                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                         </svg>
