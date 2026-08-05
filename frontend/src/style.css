@@ -277,16 +277,6 @@ body {
   color: #fff;
 }
 
-.nav-item .badge.badge-danger {
-  background: var(--danger);
-  color: white;
-}
-
-.nav-item .badge.badge-success {
-  background: var(--success);
-  color: white;
-}
-
 /* ===== Main Content ===== */
 .main-content {
   flex: 1;
@@ -1187,11 +1177,6 @@ body {
 }
 
 /* ===== Search Page ===== */
-.search-page {
-  max-width: 820px;
-  margin: 0 auto;
-}
-
 .search-page .search-input-lg {
   background-color: var(--bg-secondary);
   margin-bottom: 18px;
