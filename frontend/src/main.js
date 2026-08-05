@@ -237,6 +237,8 @@ let installedLoaded = false;
 (async () => {
     try {
         cachedDiskUsage = await Service.GetDiskUsage();
+        // Update the dashboard disk stat card once data arrives
+        updateDiskStat();
     } catch (err) {
         console.warn('预加载磁盘使用失败:', err);
     }
@@ -338,6 +340,9 @@ async function refreshDashboard(force) {
             tabCache.services.timestamp = Date.now();
             updateServiceBadge(services);
         }).catch(() => {}),
+        Service.GetDiskUsage().then(disk => {
+            cachedDiskUsage = disk;
+        }).catch(() => {}),
     ]).then(() => {
         tabCache.dashboard.timestamp = Date.now();
         setDashboardRefreshing(false);
@@ -362,10 +367,11 @@ async function refreshDashboard(force) {
 async function refreshDashboardInBackground() {
     const data = tabCache.dashboard.data;
     if (!data) return;
-    const [taps, outdated, services] = await Promise.allSettled([
+    const [taps, outdated, services, disk] = await Promise.allSettled([
         Service.GetTaps(),
         Service.GetOutdated(),
         Service.ListServices(),
+        Service.GetDiskUsage(),
     ]);
     if (taps.status === 'fulfilled') {
         data.taps = taps.value;
@@ -381,6 +387,9 @@ async function refreshDashboardInBackground() {
         tabCache.services.data = services.value;
         tabCache.services.timestamp = Date.now();
         updateServiceBadge(services.value);
+    }
+    if (disk.status === 'fulfilled') {
+        cachedDiskUsage = disk.value;
     }
     tabCache.dashboard.timestamp = Date.now();
     // Only re-render if still on dashboard tab
@@ -422,21 +431,27 @@ function parseSize(str) {
     return parseFloat(m[1]) * mult;
 }
 
-const DISK_ICONS = {
-    box: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
-    app: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`,
-    trash: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`,
-};
-const DISK_INFO = {
-    'Cellar':           { name: 'Cellar 安装目录', sub: '命令行（Formula）存放位置', icon: 'box' },
-    'Caskroom':         { name: 'Caskroom 安装目录', sub: '图形应用（Cask）存放位置', icon: 'app' },
-    'Cache':            { name: '缓存目录', sub: 'Homebrew 下载缓存', icon: 'trash' },
-    'Cellar (Intel)':   { name: 'Cellar 安装目录（Intel）', sub: '命令行（Formula）存放位置', icon: 'box' },
-    'Caskroom (Intel)': { name: 'Caskroom 安装目录（Intel）', sub: '图形应用（Cask）存放位置', icon: 'app' },
-    'Cache (Intel)':    { name: '缓存目录（Intel）', sub: 'Homebrew 下载缓存', icon: 'trash' },
-};
-// Go map 序列化后键顺序不固定，按固定顺序展示
-const DISK_ORDER = ['Cellar', 'Caskroom', 'Cache', 'Cellar (Intel)', 'Caskroom (Intel)', 'Cache (Intel)'];
+// Inverse of parseSize: bytes -> "1.2G" style string (matches Go du output)
+function formatBytes(bytes) {
+    if (!bytes || bytes <= 0) return '0 B';
+    const units = ['B', 'K', 'M', 'G', 'T'];
+    let i = 0;
+    let v = bytes;
+    while (v >= 1000 && i < units.length - 1) { v /= 1000; i++; }
+    const s = v >= 100 ? v.toFixed(0) : v.toFixed(1);
+    return s + ' ' + units[i];
+}
+
+// Sum all Homebrew directories (Cellar + Caskroom + Cache, incl. Intel variants)
+function totalDiskUsage(diskUsage) {
+    if (!diskUsage) return 0;
+    return Object.values(diskUsage).reduce((sum, v) => sum + parseSize(v), 0);
+}
+
+// Update the dashboard disk stat card from the cached disk usage map
+function updateDiskStat() {
+    setStatValue(document.getElementById('stat-disk'), formatBytes(totalDiskUsage(cachedDiskUsage)));
+}
 
 // ===== Shared icons (inline SVG, sized for list rows) =====
 const CASK_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`;
@@ -464,11 +479,10 @@ function renderDashboard(data) {
     // Stats cards
     setStatValue(document.getElementById('stat-formulas'), formulas.length);
     setStatValue(document.getElementById('stat-casks'), casks.length);
-    setStatValue(document.getElementById('stat-outdated'), outdated.length);
+    setStatValue(document.getElementById('stat-taps'), (data.taps || []).length);
 
-    // Services stat (shows the number of running services)
-    const runningServices = (data.services || []).filter(s => s.status === 'started').length;
-    setStatValue(document.getElementById('stat-services'), runningServices);
+    // Disk stat: total Homebrew directory usage (Cellar + Caskroom + Cache)
+    updateDiskStat();
 
     // Outdated badge (sidebar)
     const badge = document.getElementById('outdated-badge');
@@ -500,55 +514,6 @@ function renderDashboard(data) {
 
     renderOutdatedPreview(outdated, data._outdatedLoaded);
     renderServicesPreview(data.services, data._servicesLoaded);
-}
-
-// ===== Disk Usage =====
-function renderDiskUsage(diskUsage, loaded) {
-    const grid = document.getElementById('disk-usage-grid');
-    if (!grid) return;
-
-    // Not loaded yet - show skeleton rows
-    if (!loaded || !diskUsage || Object.keys(diskUsage).length === 0) {
-        grid.innerHTML = Array.from({ length: 3 }, () => `
-            <div class="disk-usage-item">
-                <div class="skeleton" style="width:36px;height:36px;border-radius:10px;flex-shrink:0;"></div>
-                <div class="disk-info">
-                    <div class="skeleton" style="width:55%;height:13px;"></div>
-                    <div class="skeleton" style="width:100%;height:5px;"></div>
-                    <div class="skeleton" style="width:45%;height:10px;"></div>
-                </div>
-            </div>`).join('');
-        return;
-    }
-
-    const labels = DISK_ORDER.filter(k => diskUsage[k] !== undefined);
-    Object.keys(diskUsage).forEach(k => { if (!labels.includes(k)) labels.push(k); });
-    if (labels.length === 0) {
-        grid.innerHTML = '<div class="disk-empty">暂无磁盘数据</div>';
-        return;
-    }
-
-    const items = labels.map(label => {
-        const info = DISK_INFO[label] || { name: label, sub: '', icon: 'box' };
-        return { label, name: info.name, sub: info.sub, icon: info.icon, size: diskUsage[label], bytes: parseSize(diskUsage[label]) };
-    });
-    const maxBytes = Math.max(...items.map(i => i.bytes), 1);
-
-    grid.innerHTML = items.map(item => {
-        const pct = Math.round(item.bytes / maxBytes * 100);
-        return `
-            <div class="disk-usage-item">
-                <div class="disk-icon disk-icon-${item.icon}">${DISK_ICONS[item.icon]}</div>
-                <div class="disk-info">
-                    <div class="disk-line">
-                        <span class="label">${escapeHtml(item.name)}</span>
-                        <span class="value">${escapeHtml(item.size)}</span>
-                    </div>
-                    <div class="disk-bar"><div class="disk-bar-fill disk-bar-${item.icon}" style="width:${Math.max(pct, 4)}%"></div></div>
-                    <span class="sub">${escapeHtml(item.sub)}</span>
-                </div>
-            </div>`;
-    }).join('');
 }
 
 // ===== Outdated Preview (dashboard) =====
@@ -587,7 +552,7 @@ function renderOutdatedPreview(outdated, loaded) {
         return `
         <div class="outdated-item">
             <div class="pkg-icon ${iconCls} pkg-icon-sm">${icon}</div>
-            <span class="outdated-name" title="${escapeHtml(p.description || p.name)}">${escapeHtml(p.name)}</span>
+            <span class="outdated-name">${escapeHtml(p.name)}</span>
             ${p.version ? `<span class="outdated-version">${escapeHtml(p.version)}</span>` : ''}
             ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="outdated-version outdated-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
             <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
@@ -717,7 +682,7 @@ function renderInstalled(type, packages) {
             <div class="pkg-icon pkg-icon-${type}">${isCask ? CASK_ICON : FORMULA_ICON}</div>
             <div class="pkg-main">
                 <div class="pkg-name-row">
-                    <span class="pkg-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    <span class="pkg-name">${escapeHtml(p.name)}</span>
                     <span class="pkg-version">${escapeHtml(p.version || '-')}</span>
                 </div>
                 <span class="pkg-desc">${escapeHtml(p.description || '暂无描述')}</span>
@@ -1204,7 +1169,7 @@ function renderTaps(taps) {
             return `<div class="tap-item">
                 <div class="tap-icon">${TAP_ICON}</div>
                 <div class="tap-main">
-                    <span class="tap-name" title="${escapeHtml(t)}">${escapeHtml(tapName)}</span>
+                    <span class="tap-name">${escapeHtml(tapName)}</span>
                     ${rest ? `<span class="tap-desc">${escapeHtml(rest)}</span>` : ''}
                 </div>
                 <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')">移除</button>
@@ -1374,11 +1339,11 @@ function renderServices(services) {
                     ${sv.pid ? `<span class="pkg-version">PID ${escapeHtml(sv.pid)}</span>` : ''}
                     ${sv.exit_code ? `<span class="pkg-version pkg-version-latest">退出码 ${escapeHtml(sv.exit_code)}</span>` : ''}
                 </div>
-                ${sv.file ? `<span class="pkg-desc" title="${escapeHtml(sv.file)}">${escapeHtml(sv.file)}</span>` : ''}
+                ${sv.file ? `<span class="pkg-desc">${escapeHtml(sv.file)}</span>` : ''}
                 ${sv.user ? `<span class="service-user">用户：${escapeHtml(sv.user)}</span>` : ''}
             </div>
             <div class="pkg-actions">
-                <label class="switch" title="${running ? '停止服务（取消登录自启）' : '启动服务（注册登录自启）'}">
+                <label class="switch">
                     <input type="checkbox" data-service="${escapeHtml(sv.name)}" ${running ? 'checked' : ''} onchange="toggleService(this)">
                     <span class="switch-track"><span class="switch-thumb"></span></span>
                 </label>
@@ -1436,9 +1401,9 @@ function renderServicesPreview(services, loaded) {
     container.innerHTML = `<div class="services-preview-grid">${top.map(sv => {
         const isRunning = sv.status === 'started';
         return `
-            <div class="service-chip${isRunning ? ' is-running' : ''}" title="${escapeHtml(sv.name)}">
+            <div class="service-chip${isRunning ? ' is-running' : ''}">
                 <span class="service-chip-name">${escapeHtml(sv.name)}</span>
-                <label class="switch switch-sm" title="${isRunning ? '停止服务（取消登录自启）' : '启动服务（注册登录自启）'}">
+                <label class="switch switch-sm">
                     <input type="checkbox" data-service="${escapeHtml(sv.name)}" ${isRunning ? 'checked' : ''} onchange="toggleService(this)">
                     <span class="switch-track"><span class="switch-thumb"></span></span>
                 </label>
@@ -1672,30 +1637,6 @@ async function loadConfig() {
         } catch (err) {
             document.getElementById('config-output').textContent = '加载配置失败: ' + err.message;
         }
-    }
-
-    // Disk usage lives on the config page now
-    loadDiskUsage();
-}
-
-async function loadDiskUsage() {
-    const grid = document.getElementById('disk-usage-grid');
-    if (!grid) return;
-
-    // Render from cache instantly (if any), otherwise show skeletons
-    if (cachedDiskUsage && Object.keys(cachedDiskUsage).length > 0) {
-        renderDiskUsage(cachedDiskUsage, true);
-    } else {
-        renderDiskUsage(null, false);
-    }
-    try {
-        const diskUsage = await Service.GetDiskUsage();
-        cachedDiskUsage = diskUsage;
-        if (currentTab === 'config') {
-            renderDiskUsage(diskUsage, true);
-        }
-    } catch (err) {
-        grid.innerHTML = '<div class="disk-empty">磁盘数据加载失败</div>';
     }
 }
 

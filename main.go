@@ -19,8 +19,8 @@ func main() {
 		Title:            "Brew Manager",
 		Width:            1200,
 		Height:           800,
-		MinWidth:         900,
-		MinHeight:        600,
+		MinWidth:         1200,
+		MinHeight:        800,
 		WindowStartState: options.Normal,
 		Mac: &mac.Options{
 			About: &mac.AboutInfo{

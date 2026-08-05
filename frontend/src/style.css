@@ -36,7 +36,7 @@
   --danger: #ff3b30;
   --danger-dim: rgba(255, 59, 48, 0.08);
   --radius: 10px;
-  --sidebar-width: 220px;
+  --sidebar-width: 240px;
 }
 
 body {
@@ -61,7 +61,7 @@ body {
   top: 0;
   left: 0;
   right: 0;
-  height: 10px;
+  height: 35px;
   z-index: 9998;
   /* Wails v2 frameless window drag region (CSS custom property read by the injected runtime) */
   --wails-draggable: drag;
@@ -98,7 +98,7 @@ body {
 
 /* macOS-style traffic-light region + drag handle for the frameless window */
 .sidebar-titlebar {
-  height: 48px;
+  height: 52px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -114,6 +114,9 @@ body {
   gap: 8px;
   padding-left: 12px;
   flex-shrink: 0;
+  /* Keep the traffic lights above the 35px drag strip so they stay clickable */
+  position: relative;
+  z-index: 9999;
 }
 
 .traffic-light {
@@ -150,39 +153,39 @@ body {
 .traffic-max { background: #28c840; }
 
 .app-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-secondary);
   letter-spacing: -0.01em;
   white-space: nowrap;
-  padding-left: 10px;
+  padding-left: 12px;
 }
 
 .sidebar-nav {
   flex: 1;
-  padding: 2px 10px 12px;
+  padding: 6px 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .sidebar-divider {
   height: 1px;
   background: var(--divider);
-  margin: 6px 8px;
+  margin: 10px 10px;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 11px;
+  padding: 8px 12px;
   background: transparent;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
-  border-radius: 8px;
+  border-radius: 9px;
   cursor: pointer;
   transition: all 0.1s ease;
   text-align: left;
@@ -204,6 +207,8 @@ body {
 }
 
 .nav-item svg {
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   opacity: 0.75;
 }
@@ -213,17 +218,28 @@ body {
   color: var(--accent);
 }
 
+/* 侧边栏图标彩色标识（macOS 风格色板）
+   选中态背景仍为浅蓝，图标保持各自彩色 */
+.nav-item[data-tab="dashboard"] svg { color: #0071e3; }
+.nav-item[data-tab="search"] svg { color: #34c759; }
+.nav-item[data-tab="installed-cask"] svg { color: #5e5ce6; }
+.nav-item[data-tab="installed-formula"] svg { color: #30b0c7; }
+.nav-item[data-tab="outdated"] svg { color: #ff9500; }
+.nav-item[data-tab="services"] svg { color: #ff2d55; }
+.nav-item[data-tab="taps"] svg { color: #af52de; }
+.nav-item[data-tab="config"] svg { color: #8e8e93; }
+
 .nav-item .badge {
   margin-left: auto;
   background: var(--bg-tertiary);
   color: var(--text-secondary);
   font-size: 10px;
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 8px;
-  min-width: 18px;
+  padding: 2px 7px;
+  border-radius: 9px;
+  min-width: 20px;
   text-align: center;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .nav-item.active .badge {
@@ -618,6 +634,56 @@ body {
 .dashboard-row .dashboard-section {
   margin-bottom: 0;
   min-width: 0;
+}
+
+/* Dashboard 纵向布局：
+   1) 内容不足一屏时“快速操作”吸底（margin-top: auto）
+   2) 服务/更新区块高度自适应：窗口变小时仅中段区块可压缩，
+      区块内部滚动而不是把整页撑高 */
+#tab-dashboard {
+  display: flex;
+  flex-direction: column;
+}
+
+#tab-dashboard > * {
+  flex-shrink: 0;
+}
+
+#tab-dashboard .dashboard-row {
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+#tab-dashboard .dashboard-section:last-child {
+  margin-top: auto;
+}
+
+.dashboard-row .dashboard-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.dashboard-row .outdated-preview {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dashboard-row .outdated-preview::-webkit-scrollbar {
+  width: 4px;
+}
+
+.dashboard-row .outdated-preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard-row .outdated-preview::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 2px;
+}
+
+.dashboard-row .outdated-preview::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
 }
 
 .dashboard-section h2 {
@@ -2175,23 +2241,4 @@ body {
 
 .sidebar::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 0, 0, 0.15);
-}
-
-/* ===== Responsive ===== */
-@media (max-width: 1080px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .dashboard-row {
-    grid-template-columns: 1fr;
-  }
-
-  .quick-actions {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .config-layout {
-    grid-template-columns: 1fr;
-  }
 }

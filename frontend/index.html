@@ -15,13 +15,13 @@
         <aside class="sidebar">
             <div class="sidebar-titlebar">
                 <div class="window-controls">
-                    <button class="traffic-light traffic-close" onclick="windowClose()" aria-label="关闭" title="关闭">
+                    <button class="traffic-light traffic-close" onclick="windowClose()" aria-label="关闭">
                         <svg viewBox="0 0 12 12" width="12" height="12"><line x1="3" y1="3" x2="9" y2="9"/><line x1="9" y1="3" x2="3" y2="9"/></svg>
                     </button>
-                    <button class="traffic-light traffic-min" onclick="windowMinimise()" aria-label="最小化" title="最小化">
+                    <button class="traffic-light traffic-min" onclick="windowMinimise()" aria-label="最小化">
                         <svg viewBox="0 0 12 12" width="12" height="12"><line x1="3" y1="6" x2="9" y2="6"/></svg>
                     </button>
-                    <button class="traffic-light traffic-max" onclick="windowMaximise()" aria-label="最大化" title="最大化">
+                    <button class="traffic-light traffic-max" onclick="windowMaximise()" aria-label="最大化">
                         <svg viewBox="0 0 12 12" width="12" height="12"><line x1="9.5" y1="2.5" x2="2.5" y2="9.5"/><polyline points="3.5 2.5 9.5 2.5 9.5 8.5"/></svg>
                     </button>
                 </div>
@@ -98,7 +98,7 @@
                     </div>
                     <div class="dashboard-header-actions">
                         <span class="version-badge" id="brew-version">Brew…</span>
-                        <button class="btn btn-secondary btn-refresh" id="dashboard-refresh-btn" onclick="refreshDashboard(true)" title="刷新数据">
+                        <button class="btn btn-secondary btn-refresh" id="dashboard-refresh-btn" onclick="refreshDashboard(true)">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -109,7 +109,7 @@
                 </div>
 
                 <div class="stats-grid" id="stats-grid">
-                    <div class="stat-card stat-card-clickable" data-tab-target="installed-formula" title="查看命令行列表">
+                    <div class="stat-card stat-card-clickable" data-tab-target="installed-formula">
                         <div class="stat-icon stat-icon-green">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
@@ -121,7 +121,7 @@
                             <div class="stat-sub" id="stat-formula-sub">Formula</div>
                         </div>
                     </div>
-                    <div class="stat-card stat-card-clickable" data-tab-target="installed-cask" title="查看应用列表">
+                    <div class="stat-card stat-card-clickable" data-tab-target="installed-cask">
                         <div class="stat-icon stat-icon-blue">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -134,29 +134,30 @@
                             <div class="stat-sub" id="stat-cask-sub">Cask</div>
                         </div>
                     </div>
-                    <div class="stat-card stat-card-clickable" data-tab-target="outdated" title="查看更新列表">
-                        <div class="stat-icon stat-icon-orange">
+                    <div class="stat-card stat-card-clickable" data-tab-target="taps">
+                        <div class="stat-icon stat-icon-purple">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
                             </svg>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-value skeleton-text" id="stat-outdated">-</div>
-                            <div class="stat-label">更新</div>
-                            <div class="stat-sub" id="stat-outdated-sub">Update</div>
+                            <div class="stat-value skeleton-text" id="stat-taps">-</div>
+                            <div class="stat-label">仓库</div>
+                            <div class="stat-sub" id="stat-taps-sub">Tap</div>
                         </div>
                         <svg class="stat-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </div>
-                    <div class="stat-card stat-card-clickable" data-tab-target="services" title="查看服务列表">
-                        <div class="stat-icon stat-icon-red">
+                    <div class="stat-card">
+                        <div class="stat-icon stat-icon-orange">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
                             </svg>
                         </div>
                         <div class="stat-info">
-                            <div class="stat-value skeleton-text" id="stat-services">-</div>
-                            <div class="stat-label">服务</div>
-                            <div class="stat-sub" id="stat-services-sub">Services</div>
+                            <div class="stat-value skeleton-text" id="stat-disk">-</div>
+                            <div class="stat-label">磁盘占用</div>
+                            <div class="stat-sub" id="stat-disk-sub">Homebrew</div>
                         </div>
                         <svg class="stat-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </div>
@@ -167,7 +168,7 @@
                         <h2>
                             <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
                             服务快捷管理
-                            <a class="view-all" onclick="switchTab('services')" title="查看全部服务">
+                            <a class="view-all" onclick="switchTab('services')">
                                 <span>查看全部</span>
                                 <span class="view-all-count" id="service-section-count">0/0</span>
                             </a>
@@ -178,7 +179,7 @@
                         <h2>
                             <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
                             更新
-                            <a class="view-all" onclick="switchTab('outdated')" title="查看全部待更新包">
+                            <a class="view-all" onclick="switchTab('outdated')">
                                 <span>查看全部</span>
                                 <span class="view-all-count" id="outdated-section-count">0</span>
                             </a>
@@ -193,7 +194,7 @@
                         快速操作
                     </h2>
                     <div class="quick-actions">
-                        <button class="quick-action" onclick="runDoctorQuick()" title="检查 Homebrew 环境健康状况">
+                        <button class="quick-action" onclick="runDoctorQuick()">
                             <div class="quick-action-icon quick-action-blue">
                                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                             </div>
@@ -203,7 +204,7 @@
                             </div>
                             <svg class="quick-action-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                         </button>
-                        <button class="quick-action" id="cleanup-btn" onclick="cleanupBrew()" title="清理 Homebrew 缓存和旧版本">
+                        <button class="quick-action" id="cleanup-btn" onclick="cleanupBrew()">
                             <div class="quick-action-icon quick-action-orange">
                                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                             </div>
@@ -213,7 +214,7 @@
                             </div>
                             <svg class="quick-action-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                         </button>
-                        <button class="quick-action" id="autoremove-btn" onclick="autoremoveDeps()" title="清理不再被任何包依赖的孤立依赖">
+                        <button class="quick-action" id="autoremove-btn" onclick="autoremoveDeps()">
                             <div class="quick-action-icon quick-action-purple">
                                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4V2m0 20v-2M4 9h2m12 0h2M4 15h2m12 0h2M6 6l1.5 1.5m9 9L18 18M6 18l1.5-1.5m9-9L18 6"/><circle cx="12" cy="12" r="3"/></svg>
                             </div>
@@ -223,7 +224,7 @@
                             </div>
                             <svg class="quick-action-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                         </button>
-                        <button class="quick-action" onclick="runVulnsQuick()" title="扫描已知安全漏洞">
+                        <button class="quick-action" onclick="runVulnsQuick()">
                             <div class="quick-action-icon quick-action-green">
                                 <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg>
                             </div>
@@ -261,7 +262,7 @@
                     </div>
                     <div class="page-heading-actions">
                         <span class="count-badge count-badge-blue" id="cask-page-count">0 个</span>
-                        <button class="btn btn-secondary btn-refresh" id="installed-cask-refresh" onclick="refreshInstalled('cask')" title="刷新列表">
+                        <button class="btn btn-secondary btn-refresh" id="installed-cask-refresh" onclick="refreshInstalled('cask')">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -285,7 +286,7 @@
                     </div>
                     <div class="page-heading-actions">
                         <span class="count-badge count-badge-green" id="formula-page-count">0 个</span>
-                        <button class="btn btn-secondary btn-refresh" id="installed-formula-refresh" onclick="refreshInstalled('formula')" title="刷新列表">
+                        <button class="btn btn-secondary btn-refresh" id="installed-formula-refresh" onclick="refreshInstalled('formula')">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -309,7 +310,7 @@
                     </div>
                     <div class="page-heading-actions">
                         <span class="count-badge count-badge-orange" id="outdated-page-count">0 个</span>
-                        <button class="btn btn-secondary btn-refresh" id="outdated-refresh" onclick="refreshOutdated()" title="刷新列表">
+                        <button class="btn btn-secondary btn-refresh" id="outdated-refresh" onclick="refreshOutdated()">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -339,7 +340,7 @@
                     </div>
                     <div class="page-heading-actions">
                         <span class="count-badge count-badge-green" id="service-page-count">0 个</span>
-                        <button class="btn btn-secondary btn-refresh" id="services-refresh" onclick="refreshServices()" title="刷新服务状态">
+                        <button class="btn btn-secondary btn-refresh" id="services-refresh" onclick="refreshServices()">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -393,16 +394,6 @@
                             </h2>
                             <pre id="config-output" class="output-pre">加载中...</pre>
                         </div>
-
-                        <!-- Disk Usage -->
-                        <div class="settings-section">
-                            <h2 class="settings-heading">
-                                <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-                                磁盘使用
-                                <span class="settings-heading-desc">Homebrew 目录占用</span>
-                            </h2>
-                            <div class="disk-usage-grid" id="disk-usage-grid"></div>
-                        </div>
                     </div>
 
                     <!-- Right: operations -->
@@ -434,11 +425,11 @@
                             </h2>
                             <p class="config-hint">导出当前安装的软件包清单作为备份，或通过备份文件一键恢复安装所有软件包。</p>
                             <div class="config-action-row">
-                                <button class="btn btn-primary" onclick="exportConfig()" title="将当前安装的软件包清单保存为文件">
+                                <button class="btn btn-primary" onclick="exportConfig()">
                                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                                     导出配置
                                 </button>
-                                <button class="btn btn-secondary" onclick="importConfig()" title="从备份文件恢复安装软件包">
+                                <button class="btn btn-secondary" onclick="importConfig()">
                                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                                     导入配置
                                 </button>
