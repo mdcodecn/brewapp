@@ -466,25 +466,9 @@ function renderDashboard(data) {
     setStatValue(document.getElementById('stat-casks'), casks.length);
     setStatValue(document.getElementById('stat-outdated'), outdated.length);
 
-    const outdatedSub = document.getElementById('stat-outdated-sub');
-    outdatedSub.textContent = data._outdatedLoaded
-        ? (outdated.length === 0 ? '已是最新' : '点击查看')
-        : '加载中…';
-
-    // Repository (tap) stat
-    setStatValue(document.getElementById('stat-taps'), (data.taps || []).length);
-    const tapsSub = document.getElementById('stat-taps-sub');
-    tapsSub.textContent = data._tapsLoaded
-        ? ((data.taps || []).length === 0 ? '暂无仓库' : '点击查看')
-        : '加载中…';
-
     // Services stat (shows the number of running services)
     const runningServices = (data.services || []).filter(s => s.status === 'started').length;
     setStatValue(document.getElementById('stat-services'), runningServices);
-    const servicesSub = document.getElementById('stat-services-sub');
-    servicesSub.textContent = data._servicesLoaded
-        ? (runningServices === 0 ? '无运行中' : '点击查看')
-        : '加载中…';
 
     // Outdated badge (sidebar)
     const badge = document.getElementById('outdated-badge');
