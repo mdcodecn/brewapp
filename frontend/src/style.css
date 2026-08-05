@@ -164,11 +164,7 @@ body {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #6a70ff 0%, #4338ca 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: #6366f1; /* fallback for non-WebKit */
+  color: var(--accent);
 }
 
 .app-logo-dot {
@@ -689,9 +685,11 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
 }
 
 .dashboard-row .outdated-preview {
+  flex: 1;
   min-height: 0;
   overflow-y: auto;
 }
