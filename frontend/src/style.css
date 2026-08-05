@@ -236,6 +236,11 @@ body {
   color: white;
 }
 
+.nav-item .badge.badge-success {
+  background: var(--success);
+  color: white;
+}
+
 /* ===== Main Content ===== */
 .main-content {
   flex: 1;
@@ -514,7 +519,7 @@ body {
 /* ===== Stats Grid ===== */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 14px;
   margin-bottom: 18px;
 }
@@ -553,6 +558,7 @@ body {
 .stat-icon-green { background: var(--success-dim); color: var(--success); }
 .stat-icon-orange { background: var(--warning-dim); color: var(--warning); }
 .stat-icon-purple { background: rgba(175, 82, 222, 0.1); color: #af52de; }
+.stat-icon-red { background: var(--danger-dim); color: var(--danger); }
 
 .stat-info {
   min-width: 0;
@@ -1967,6 +1973,38 @@ body {
   word-break: break-all;
   max-height: 480px;
   overflow-y: auto;
+}
+
+/* ===== Services (服务管理) ===== */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-started { background: var(--success-dim); color: var(--success); }
+.status-stopped { background: var(--danger-dim); color: var(--danger); }
+.status-error   { background: var(--danger-dim); color: var(--danger); }
+.status-none    { background: var(--bg-tertiary); color: var(--text-secondary); }
+
+.service-user {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
 }
 
 /* ===== Scrollbar ===== */

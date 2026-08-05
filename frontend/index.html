@@ -62,6 +62,13 @@
                     <span>更新</span>
                     <span class="badge badge-danger" id="outdated-badge" style="display:none;">0</span>
                 </button>
+                <button class="nav-item" data-tab="services">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                    </svg>
+                    <span>服务</span>
+                    <span class="badge badge-success" id="service-count-badge" style="display:none;">0</span>
+                </button>
                 <button class="nav-item" data-tab="taps">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
@@ -150,6 +157,19 @@
                             <div class="stat-value skeleton-text" id="stat-taps">-</div>
                             <div class="stat-label">仓库</div>
                             <div class="stat-sub" id="stat-taps-sub">加载中…</div>
+                        </div>
+                        <svg class="stat-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                    </div>
+                    <div class="stat-card stat-card-clickable" data-tab-target="services" title="查看服务列表">
+                        <div class="stat-icon stat-icon-red">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                            </svg>
+                        </div>
+                        <div class="stat-info">
+                            <div class="stat-value skeleton-text" id="stat-services">-</div>
+                            <div class="stat-label">服务</div>
+                            <div class="stat-sub" id="stat-services-sub">加载中…</div>
                         </div>
                         <svg class="stat-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </div>
@@ -316,6 +336,30 @@
                 </div>
                 <input type="text" id="outdated-search" class="search-input list-search" placeholder="搜索待更新的包…" oninput="filterOutdated()">
                 <div id="outdated-list" class="pkg-list">
+                    <div class="loading-state"><span class="spinner"></span> 加载中...</div>
+                </div>
+            </div>
+
+            <!-- Services -->
+            <div class="tab-content" id="tab-services">
+                <div class="page-heading">
+                    <div class="page-heading-text">
+                        <h1>服务</h1>
+                        <p class="page-subtitle">管理 Homebrew 后台服务（brew services）</p>
+                    </div>
+                    <div class="page-heading-actions">
+                        <span class="count-badge count-badge-green" id="service-page-count">0 个</span>
+                        <button class="btn btn-secondary btn-refresh" id="services-refresh" onclick="refreshServices()" title="刷新服务状态">
+                            <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                            </svg>
+                            <span>刷新</span>
+                        </button>
+                    </div>
+                </div>
+                <input type="text" id="services-search" class="search-input list-search" placeholder="搜索服务…" oninput="filterServices()">
+                <div id="services-list" class="pkg-list">
                     <div class="loading-state"><span class="spinner"></span> 加载中...</div>
                 </div>
             </div>

@@ -32,6 +32,7 @@ function switchTab(tab) {
     if (tab === 'dashboard') refreshDashboard();
     else if (tab === 'installed-cask' || tab === 'installed-formula') loadInstalled(tab);
     else if (tab === 'outdated') loadOutdated();
+    else if (tab === 'services') loadServices();
     else if (tab === 'taps') loadTaps();
     else if (tab === 'dependencies') {
         // Dependencies tab doesn't auto-load, waits for user input
@@ -177,6 +178,7 @@ const tabCache = {
     dashboard:  { data: null, timestamp: 0 },
     installed:   { data: null, timestamp: 0 },
     outdated:    { data: null, timestamp: 0 },
+    services:    { data: null, timestamp: 0 },
 
     taps:     { data: null, timestamp: 0 },
     config:   { data: null, timestamp: 0 },
@@ -214,6 +216,23 @@ let installedLoaded = false;
     }
 })();
 
+// Pre-load services on startup so the 服务 stat & sidebar badge show instantly
+(async () => {
+    try {
+        const services = await Service.ListServices();
+        tabCache.services.data = services;
+        tabCache.services.timestamp = Date.now();
+        updateServiceBadge(services);
+        if (currentTab === 'dashboard' && tabCache.dashboard.data) {
+            tabCache.dashboard.data.services = services;
+            tabCache.dashboard.data._servicesLoaded = true;
+            renderDashboard(tabCache.dashboard.data);
+        }
+    } catch (err) {
+        console.warn('预加载服务列表失败:', err);
+    }
+})();
+
 // Cache TTL in milliseconds (5 minutes)
 const CACHE_TTL = 5 * 60 * 1000;
 
@@ -239,6 +258,13 @@ function markCacheDirty(tab) {
     if (tab === 'taps') {
         tabCache.taps.data = null;
         tabCache.taps.timestamp = 0;
+    }
+    if (tab === 'services') {
+        tabCache.services.data = null;
+        tabCache.services.timestamp = 0;
+        // Service actions change the dashboard stat too
+        tabCache.dashboard.data = null;
+        tabCache.dashboard.timestamp = 0;
     }
     // Config tab includes update, doctor, vulns
     if (tab === 'config' || tab === 'update' || tab === 'doctor' || tab === 'vulns') {
@@ -273,9 +299,11 @@ async function refreshDashboard(force) {
         diskUsage: cachedDiskUsage || {},
         taps: tabCache.taps.data || [],
         outdated: tabCache.outdated.data || [],
+        services: tabCache.services.data || [],
         _tapsLoaded: !!tabCache.taps.data,
         _outdatedLoaded: !!tabCache.outdated.data,
         _diskLoaded: !!cachedDiskUsage,
+        _servicesLoaded: !!tabCache.services.data,
     };
     tabCache.dashboard.data = quickData;
     tabCache.dashboard.timestamp = Date.now();
@@ -301,6 +329,13 @@ async function refreshDashboard(force) {
             quickData.taps = taps;
             quickData._tapsLoaded = true;
         }).catch(() => {}),
+        Service.ListServices().then(services => {
+            quickData.services = services;
+            quickData._servicesLoaded = true;
+            tabCache.services.data = services;
+            tabCache.services.timestamp = Date.now();
+            updateServiceBadge(services);
+        }).catch(() => {}),
     ]).then(() => {
         tabCache.dashboard.timestamp = Date.now();
         setDashboardRefreshing(false);
@@ -325,10 +360,11 @@ async function refreshDashboard(force) {
 async function refreshDashboardInBackground() {
     const data = tabCache.dashboard.data;
     if (!data) return;
-    const [diskUsage, taps, outdated] = await Promise.allSettled([
+    const [diskUsage, taps, outdated, services] = await Promise.allSettled([
         Service.GetDiskUsage(),
         Service.GetTaps(),
         Service.GetOutdated(),
+        Service.ListServices(),
     ]);
     if (diskUsage.status === 'fulfilled') {
         cachedDiskUsage = diskUsage.value;
@@ -342,6 +378,13 @@ async function refreshDashboardInBackground() {
     if (outdated.status === 'fulfilled') {
         data.outdated = outdated.value;
         data._outdatedLoaded = true;
+    }
+    if (services.status === 'fulfilled') {
+        data.services = services.value;
+        data._servicesLoaded = true;
+        tabCache.services.data = services.value;
+        tabCache.services.timestamp = Date.now();
+        updateServiceBadge(services.value);
     }
     tabCache.dashboard.timestamp = Date.now();
     // Only re-render if still on dashboard tab
@@ -461,6 +504,14 @@ function renderDashboard(data) {
     const tapsSub = document.getElementById('stat-taps-sub');
     tapsSub.textContent = data._tapsLoaded
         ? ((data.taps || []).length === 0 ? '暂无仓库' : '点击查看')
+        : '加载中…';
+
+    // Services stat (shows the number of running services)
+    const runningServices = (data.services || []).filter(s => s.status === 'started').length;
+    setStatValue(document.getElementById('stat-services'), runningServices);
+    const servicesSub = document.getElementById('stat-services-sub');
+    servicesSub.textContent = data._servicesLoaded
+        ? (runningServices === 0 ? '无运行中' : '点击查看')
         : '加载中…';
 
     // Outdated badge (sidebar)
@@ -1245,6 +1296,225 @@ async function removeTap(tap) {
                 return `仓库 ${tap} 已移除`;
             } catch (err) {
                 throw new Error(`移除失败: ${err.message}`);
+            }
+        }
+    );
+}
+
+// ===== 服务管理（brew services） =====
+const SERVICE_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
+
+const SERVICE_STATUS = {
+    started: { label: '运行中', cls: 'status-started' },
+    stopped: { label: '已停止', cls: 'status-stopped' },
+    none:    { label: '未运行', cls: 'status-none' },
+    error:   { label: '错误', cls: 'status-error' },
+    unknown: { label: '未知', cls: 'status-none' },
+};
+
+// Update the sidebar badge with the number of running services
+function updateServiceBadge(services) {
+    const badge = document.getElementById('service-count-badge');
+    if (!badge) return;
+    const running = (services || []).filter(s => s.status === 'started').length;
+    if (running > 0) {
+        badge.style.display = 'inline';
+        badge.textContent = running;
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+window.refreshServices = refreshServices;
+async function refreshServices() {
+    const btn = document.getElementById('services-refresh');
+    spinRefreshBtn(btn, true);
+    try {
+        const services = await Service.ListServices();
+        tabCache.services.data = services;
+        tabCache.services.timestamp = Date.now();
+        updateServiceBadge(services);
+        renderServices(services);
+        showToast('服务列表已刷新', 'success');
+    } catch (err) {
+        showToast('刷新失败: ' + err.message, 'error');
+    }
+    spinRefreshBtn(btn, false);
+}
+
+window.filterServices = filterServices;
+function filterServices() {
+    renderServices(tabCache.services.data || []);
+}
+
+async function loadServices() {
+    // If cache is valid, render immediately from cache
+    if (isCacheValid(tabCache.services)) {
+        renderServices(tabCache.services.data);
+        loadServicesInBackground();
+        return;
+    }
+    try {
+        const services = await Service.ListServices();
+        tabCache.services.data = services;
+        tabCache.services.timestamp = Date.now();
+        updateServiceBadge(services);
+        renderServices(services);
+    } catch (err) {
+        const container = document.getElementById('services-list');
+        if (container) container.innerHTML = `<p class="empty-state">加载失败: ${err.message}</p>`;
+    }
+}
+
+async function loadServicesInBackground() {
+    try {
+        const services = await Service.ListServices();
+        tabCache.services.data = services;
+        tabCache.services.timestamp = Date.now();
+        updateServiceBadge(services);
+        if (currentTab === 'services') {
+            renderServices(services);
+        }
+    } catch (err) {
+        // Silently fail for background refresh
+    }
+}
+
+function renderServices(services) {
+    updateServiceBadge(services);
+
+    const search = (document.getElementById('services-search')?.value || '').toLowerCase();
+    const filtered = services.filter(sv => {
+        if (!search) return true;
+        return sv.name.toLowerCase().includes(search) ||
+               (sv.user || '').toLowerCase().includes(search) ||
+               (sv.file || '').toLowerCase().includes(search);
+    });
+
+    const countEl = document.getElementById('service-page-count');
+    if (countEl) countEl.textContent = filtered.length + ' 个';
+
+    const container = document.getElementById('services-list');
+    if (!container) return;
+
+    if (filtered.length === 0) {
+        container.innerHTML = services.length === 0
+            ? emptyStateHTML(SERVICE_ICON, '暂无服务', '当 Formula 提供后台守护进程（如 mysql、redis）时，这里会显示服务')
+            : emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的服务', '换个关键词试试');
+        return;
+    }
+
+    container.innerHTML = filtered.map(sv => {
+        const st = SERVICE_STATUS[sv.status] || SERVICE_STATUS.unknown;
+        const iconCls = sv.status === 'started' ? 'pkg-icon-formula' : 'pkg-icon-cask';
+        return `
+        <div class="pkg-item">
+            <div class="pkg-icon ${iconCls}">${SERVICE_ICON}</div>
+            <div class="pkg-main">
+                <div class="pkg-name-row">
+                    <span class="pkg-name">${escapeHtml(sv.name)}</span>
+                    <span class="status-badge ${st.cls}">${st.label}</span>
+                    ${sv.pid ? `<span class="pkg-version">PID ${escapeHtml(sv.pid)}</span>` : ''}
+                    ${sv.exit_code ? `<span class="pkg-version pkg-version-latest">退出码 ${escapeHtml(sv.exit_code)}</span>` : ''}
+                </div>
+                ${sv.file ? `<span class="pkg-desc" title="${escapeHtml(sv.file)}">${escapeHtml(sv.file)}</span>` : ''}
+                ${sv.user ? `<span class="service-user">用户：${escapeHtml(sv.user)}</span>` : ''}
+            </div>
+            <div class="pkg-actions">${serviceActions(sv)}</div>
+        </div>`;
+    }).join('');
+}
+
+// Context-aware action buttons based on the service status
+function serviceActions(sv) {
+    const name = escapeHtml(sv.name);
+    if (sv.status === 'started') {
+        return `
+            <button class="btn btn-warning btn-sm" onclick="stopService('${name}')">停止</button>
+            <button class="btn btn-secondary btn-sm" onclick="restartService('${name}')">重启</button>`;
+    }
+    if (sv.status === 'error') {
+        return `
+            <button class="btn btn-secondary btn-sm" onclick="restartService('${name}')">重启</button>
+            <button class="btn btn-danger btn-sm" onclick="stopService('${name}')">停止</button>`;
+    }
+    // stopped / none: offer a permanent start and a temporary run
+    return `
+        <button class="btn btn-primary btn-sm" onclick="startService('${name}')">启动</button>
+        <button class="btn btn-secondary btn-sm" onclick="runService('${name}')">运行</button>`;
+}
+
+// After a service action, invalidate caches and reload the list
+function reloadServices() {
+    markCacheDirty('services');
+    tabCache.services.data = null;
+    tabCache.services.timestamp = 0;
+    setTimeout(() => loadServices(), 400);
+}
+
+window.startService = startService;
+async function startService(name) {
+    showModalLoading(
+        '确认启动服务',
+        `确定要启动服务 <strong>${escapeHtml(name)}</strong> 吗？<br>启动后将注册为登录时自动运行。`,
+        async () => {
+            try {
+                await Service.StartService(name);
+                reloadServices();
+                return `服务 ${name} 已启动`;
+            } catch (err) {
+                throw new Error(`启动失败: ${err.message}`);
+            }
+        }
+    );
+}
+
+window.stopService = stopService;
+async function stopService(name) {
+    showModalLoading(
+        '确认停止服务',
+        `确定要停止服务 <strong>${escapeHtml(name)}</strong> 吗？<br>停止后将取消登录时自动运行。`,
+        async () => {
+            try {
+                await Service.StopService(name);
+                reloadServices();
+                return `服务 ${name} 已停止`;
+            } catch (err) {
+                throw new Error(`停止失败: ${err.message}`);
+            }
+        }
+    );
+}
+
+window.restartService = restartService;
+async function restartService(name) {
+    showModalLoading(
+        '确认重启服务',
+        `确定要重启服务 <strong>${escapeHtml(name)}</strong> 吗？`,
+        async () => {
+            try {
+                await Service.RestartService(name);
+                reloadServices();
+                return `服务 ${name} 已重启`;
+            } catch (err) {
+                throw new Error(`重启失败: ${err.message}`);
+            }
+        }
+    );
+}
+
+window.runService = runService;
+async function runService(name) {
+    showModalLoading(
+        '确认运行服务',
+        `确定要以临时方式运行服务 <strong>${escapeHtml(name)}</strong> 吗？<br>仅本次运行，不会注册登录自启。`,
+        async () => {
+            try {
+                await Service.RunService(name);
+                reloadServices();
+                return `服务 ${name} 已运行`;
+            } catch (err) {
+                throw new Error(`运行失败: ${err.message}`);
             }
         }
     );

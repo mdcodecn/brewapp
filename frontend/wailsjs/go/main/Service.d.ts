@@ -44,9 +44,13 @@ export function ImportConfig():Promise<main.ImportResult>;
 
 export function Install(arg1:string,arg2:string):Promise<void>;
 
+export function KillService(arg1:string):Promise<void>;
+
 export function Link(arg1:string):Promise<void>;
 
 export function ListInstalled():Promise<Array<main.BrewPackage>>;
+
+export function ListServices():Promise<Array<main.BrewService>>;
 
 export function Pin(arg1:string):Promise<void>;
 
@@ -54,7 +58,15 @@ export function Reinstall(arg1:string,arg2:string):Promise<void>;
 
 export function RemoveTap(arg1:string):Promise<void>;
 
+export function RestartService(arg1:string):Promise<void>;
+
+export function RunService(arg1:string):Promise<void>;
+
 export function Search(arg1:string):Promise<Array<main.BrewSearchResult>>;
+
+export function StartService(arg1:string):Promise<void>;
+
+export function StopService(arg1:string):Promise<void>;
 
 export function Uninstall(arg1:string,arg2:string):Promise<void>;
 

@@ -52,6 +52,28 @@ export namespace main {
 	        this.score = source["score"];
 	    }
 	}
+	export class BrewService {
+	    name: string;
+	    status: string;
+	    user?: string;
+	    file?: string;
+	    exit_code?: string;
+	    pid?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BrewService(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.status = source["status"];
+	        this.user = source["user"];
+	        this.file = source["file"];
+	        this.exit_code = source["exit_code"];
+	        this.pid = source["pid"];
+	    }
+	}
 	export class ImportFailure {
 	    name: string;
 	    error: string;

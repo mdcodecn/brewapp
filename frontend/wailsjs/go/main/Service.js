@@ -86,12 +86,20 @@ export function Install(arg1, arg2) {
   return window['go']['main']['Service']['Install'](arg1, arg2);
 }
 
+export function KillService(arg1) {
+  return window['go']['main']['Service']['KillService'](arg1);
+}
+
 export function Link(arg1) {
   return window['go']['main']['Service']['Link'](arg1);
 }
 
 export function ListInstalled() {
   return window['go']['main']['Service']['ListInstalled']();
+}
+
+export function ListServices() {
+  return window['go']['main']['Service']['ListServices']();
 }
 
 export function Pin(arg1) {
@@ -106,8 +114,24 @@ export function RemoveTap(arg1) {
   return window['go']['main']['Service']['RemoveTap'](arg1);
 }
 
+export function RestartService(arg1) {
+  return window['go']['main']['Service']['RestartService'](arg1);
+}
+
+export function RunService(arg1) {
+  return window['go']['main']['Service']['RunService'](arg1);
+}
+
 export function Search(arg1) {
   return window['go']['main']['Service']['Search'](arg1);
+}
+
+export function StartService(arg1) {
+  return window['go']['main']['Service']['StartService'](arg1);
+}
+
+export function StopService(arg1) {
+  return window['go']['main']['Service']['StopService'](arg1);
 }
 
 export function Uninstall(arg1, arg2) {

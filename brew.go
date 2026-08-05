@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,16 @@ type BrewPackage struct {
 	Pinned        bool     `json:"pinned"`
 	DependsOn     []string `json:"depends_on,omitempty"`
 	InstallTime   string   `json:"install_time,omitempty"`
+}
+
+// BrewService represents a background service managed by `brew services`
+type BrewService struct {
+	Name     string `json:"name"`
+	Status   string `json:"status"` // started / stopped / none / error / unknown
+	User     string `json:"user,omitempty"`
+	File     string `json:"file,omitempty"`
+	ExitCode string `json:"exit_code,omitempty"`
+	Pid      string `json:"pid,omitempty"`
 }
 
 // BrewSearchResult represents a search result from brew search
@@ -1181,4 +1192,153 @@ func (s *Service) GetOutdatedWithVersion() ([]BrewPackage, error) {
 	})
 
 	return packages, nil
+}
+
+// ===== brew services =====
+
+// serviceListJSONRow mirrors one entry of `brew services list --json`.
+// exit_code / pid may be null or a number, so they are kept as raw values
+// and normalized to strings for display.
+type serviceListJSONRow struct {
+	Name     string      `json:"name"`
+	Status   string      `json:"status"`
+	User     string      `json:"user"`
+	File     string      `json:"file"`
+	ExitCode interface{} `json:"exit_code"`
+	Pid      interface{} `json:"pid"`
+}
+
+// ListServices returns all services known to `brew services list`
+func (s *Service) ListServices() ([]BrewService, error) {
+	// Primary: JSON output (includes status, user, plist path, pid, exit code)
+	output, err := s.runBrew("services", "list", "--json")
+	if err == nil {
+		var raw []serviceListJSONRow
+		if jsonErr := json.Unmarshal([]byte(output), &raw); jsonErr == nil {
+			services := make([]BrewService, 0, len(raw))
+			for _, r := range raw {
+				services = append(services, BrewService{
+					Name:     r.Name,
+					Status:   r.Status,
+					User:     r.User,
+					File:     r.File,
+					ExitCode: formatServiceField(r.ExitCode),
+					Pid:      formatServiceField(r.Pid),
+				})
+			}
+			return services, nil
+		}
+	}
+
+	// Fallback: parse the legacy text table (older brew without --json)
+	textOut, textErr := s.runBrew("services", "list")
+	if textErr != nil {
+		return nil, fmt.Errorf("failed to list services: %w", textErr)
+	}
+	return s.parseServicesTable(textOut)
+}
+
+// parseServicesTable parses the legacy `brew services list` text output:
+//
+//	Name    Status  User   File
+//	mysql   started bob    ~/Library/LaunchAgents/homebrew.mxcl.mysql.plist
+//	nginx   none
+func (s *Service) parseServicesTable(output string) ([]BrewService, error) {
+	services := make([]BrewService, 0)
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || isBrewNoiseLine(line) {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		// Skip the header row
+		if fields[0] == "Name" {
+			continue
+		}
+
+		svc := BrewService{Name: fields[0]}
+		if len(fields) > 1 {
+			svc.Status = fields[1]
+		}
+		if len(fields) > 2 {
+			// The User column may be empty; a value starting with '/' or '~'
+			// is the File path, not a username.
+			if !strings.HasPrefix(fields[2], "/") && !strings.HasPrefix(fields[2], "~") {
+				svc.User = fields[2]
+				if len(fields) > 3 {
+					svc.File = strings.Join(fields[3:], " ")
+				}
+			} else {
+				svc.File = strings.Join(fields[2:], " ")
+			}
+		}
+		services = append(services, svc)
+	}
+	return services, nil
+}
+
+// formatServiceField renders a possibly-null numeric JSON field (exit_code / pid)
+// as a plain string for display.
+func formatServiceField(v interface{}) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case float64:
+		if t == float64(int64(t)) {
+			return strconv.FormatInt(int64(t), 10)
+		}
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
+}
+
+// StartService starts a service and registers it to launch at login
+func (s *Service) StartService(name string) error {
+	_, err := s.runBrew("services", "start", name)
+	if err != nil {
+		return fmt.Errorf("failed to start service %s: %w", name, err)
+	}
+	return nil
+}
+
+// StopService stops a service and unregisters it from login startup
+func (s *Service) StopService(name string) error {
+	_, err := s.runBrew("services", "stop", name)
+	if err != nil {
+		return fmt.Errorf("failed to stop service %s: %w", name, err)
+	}
+	return nil
+}
+
+// RestartService restarts a service (starts it if it is not running)
+func (s *Service) RestartService(name string) error {
+	_, err := s.runBrew("services", "restart", name)
+	if err != nil {
+		return fmt.Errorf("failed to restart service %s: %w", name, err)
+	}
+	return nil
+}
+
+// RunService runs a service in the foreground without registering it at login
+func (s *Service) RunService(name string) error {
+	_, err := s.runBrew("services", "run", name)
+	if err != nil {
+		return fmt.Errorf("failed to run service %s: %w", name, err)
+	}
+	return nil
+}
+
+// KillService kills a service without unregistering it from login startup
+func (s *Service) KillService(name string) error {
+	_, err := s.runBrew("services", "kill", name)
+	if err != nil {
+		return fmt.Errorf("failed to kill service %s: %w", name, err)
+	}
+	return nil
 }
