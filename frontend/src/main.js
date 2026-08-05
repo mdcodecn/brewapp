@@ -96,10 +96,7 @@ let currentDetailPackage = null;
 window.showDetailModal = showDetailModal;
 function showDetailModal(pkg) {
     currentDetailPackage = pkg;
-    document.getElementById('detail-modal-title').textContent = pkg.name;
     const body = document.getElementById('detail-modal-body');
-    const actionBtn = document.getElementById('detail-modal-action');
-    actionBtn.style.display = 'none';
 
     body.innerHTML = '<div class="loading-state"><span class="spinner"></span> 加载详情...</div>';
     document.getElementById('detail-modal-overlay').style.display = 'flex';
@@ -114,99 +111,58 @@ function showDetailModal(pkg) {
 
 function renderDetailModal(info) {
     const body = document.getElementById('detail-modal-body');
-    const actionBtn = document.getElementById('detail-modal-action');
+    const isCask = info.type === 'cask';
 
-    let html = `
-        <div class="detail-info-grid">
-            <div class="detail-info-item">
-                <div class="label">名称</div>
-                <div class="value">${escapeHtml(info.name)}</div>
+    body.innerHTML = `
+        <div class="detail-hero">
+            <div class="pkg-icon pkg-icon-lg pkg-icon-${info.type}">${isCask ? CASK_ICON : FORMULA_ICON}</div>
+            <div class="detail-hero-main">
+                <div class="detail-hero-title-row">
+                    <span class="detail-hero-name">${escapeHtml(info.name)}</span>
+                    <span class="type-badge ${info.type}">${isCask ? '应用' : '命令行'}</span>
+                </div>
+                <span class="detail-hero-version">${escapeHtml(info.version || '版本未知')}</span>
             </div>
-            <div class="detail-info-item">
-                <div class="label">版本</div>
-                <div class="value">${escapeHtml(info.version || '-')}</div>
-            </div>
-            <div class="detail-info-item">
-                <div class="label">类型</div>
-                <div class="value"><span class="type-badge ${info.type}">${info.type}</span></div>
-            </div>
-            <div class="detail-info-item">
-                <div class="label">描述</div>
-                <div class="value" style="max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(info.description || '暂无描述')}</div>
-            </div>
+        </div>
+        <p class="detail-desc">${escapeHtml(info.description || '暂无描述')}</p>
+        <div class="detail-section">
+            <div class="detail-section-header"><span>依赖</span><span class="count-badge" id="deps-count">…</span></div>
+            <div class="detail-deps-list" id="detail-deps"><span class="rel-loading">加载中...</span></div>
+        </div>
+        <div class="detail-section">
+            <div class="detail-section-header"><span>被依赖</span><span class="count-badge" id="uses-count">…</span></div>
+            <div class="detail-deps-list" id="detail-uses"><span class="rel-loading">加载中...</span></div>
         </div>
     `;
 
-    // Load dependencies (async, don't block the main info display)
+    // Load dependencies and dependents in parallel; each fills its own column
     Service.GetDependencies(info.name).then(deps => {
-        if (deps && deps.length > 0) {
-            html += `<div style="margin-top:16px;"><strong>依赖 (${deps.length}):</strong>`;
-            html += `<div class="detail-deps-list">`;
-            deps.forEach(dep => {
-                html += `<span class="dep-tag">${escapeHtml(dep)}</span>`;
-            });
-            html += `</div></div>`;
-        } else {
-            html += `<div style="margin-top:16px;color:var(--text-secondary);font-size:13px;">暂无依赖信息</div>`;
-        }
-        body.innerHTML = html;
+        renderRelationList('deps-count', 'detail-deps', deps, '暂无依赖');
     }).catch(() => {
-        // Dependencies failed, still show basic info
-        body.innerHTML = html;
+        renderRelationList('deps-count', 'detail-deps', null, '获取失败');
     });
 
-    // Set action buttons based on installed status (not dependent on deps loading)
-    if (info.installed) {
-        // Add pin/unpin button
-        const pinBtn = document.createElement('button');
-        pinBtn.textContent = '锁定';
-        pinBtn.className = 'btn btn-secondary';
-        pinBtn.onclick = () => {
-            closeDetailModal();
-            pinPackage(info.name);
-        };
-        actionBtn.parentNode.insertBefore(pinBtn, actionBtn);
+    Service.GetUses(info.name).then(uses => {
+        renderRelationList('uses-count', 'detail-uses', uses, '暂无被依赖信息');
+    }).catch(() => {
+        renderRelationList('uses-count', 'detail-uses', null, '获取失败');
+    });
+}
 
-        // Add reinstall button before the action button
-        const reinstallBtn = document.createElement('button');
-        reinstallBtn.textContent = '重装';
-        reinstallBtn.className = 'btn btn-secondary';
-        reinstallBtn.onclick = () => {
-            closeDetailModal();
-            reinstallPackage(info.name, info.type);
-        };
-        actionBtn.parentNode.insertBefore(reinstallBtn, actionBtn);
-
-        // Add link/unlink button for casks
-        if (info.type === 'cask') {
-            const linkBtn = document.createElement('button');
-            linkBtn.textContent = '链接';
-            linkBtn.className = 'btn btn-secondary';
-            linkBtn.onclick = () => {
-                closeDetailModal();
-                unlinkPackage(info.name);
-            };
-            actionBtn.parentNode.insertBefore(linkBtn, actionBtn);
-        }
-
-        actionBtn.textContent = '卸载';
-        actionBtn.className = 'btn btn-danger';
-        actionBtn.style.display = 'inline-flex';
-        actionBtn.onclick = () => {
-            closeDetailModal();
-            uninstallPackage(info.name, info.type);
-        };
+// renderRelationList fills one relation section (依赖 / 被依赖) with tags.
+// Tags are clickable and open the detail of that package.
+function renderRelationList(countId, listId, items, emptyText) {
+    const countEl = document.getElementById(countId);
+    if (countEl) countEl.textContent = items && items.length > 0 ? String(items.length) : '0';
+    const listEl = document.getElementById(listId);
+    if (!listEl) return;
+    if (items && items.length > 0) {
+        listEl.innerHTML = items.map(dep =>
+            `<span class="dep-tag dep-tag-link" onclick="showDetailModal(${jsonInline({name: dep, type: 'formula'})})">${escapeHtml(dep)}</span>`
+        ).join('');
     } else {
-        actionBtn.textContent = '安装';
-        actionBtn.className = 'btn btn-primary';
-        actionBtn.style.display = 'inline-flex';
-        actionBtn.onclick = () => {
-            closeDetailModal();
-            installPackage(info.name, info.type);
-        };
+        listEl.innerHTML = `<span class="rel-empty">${escapeHtml(emptyText)}</span>`;
     }
-
-    body.innerHTML = html;
 }
 
 window.closeDetailModal = closeDetailModal;
@@ -237,6 +193,24 @@ let installedLoaded = false;
         tabCache.installed.timestamp = Date.now();
     } catch (err) {
         console.warn('预加载已安装包失败:', err);
+    }
+})();
+
+// Pre-load taps on startup so the 仓库 stat & sidebar badge show instantly,
+// without waiting for the slower outdated check
+(async () => {
+    try {
+        const taps = await Service.GetTaps();
+        tabCache.taps.data = taps;
+        tabCache.taps.timestamp = Date.now();
+        updateTapBadge(taps.length);
+        if (currentTab === 'dashboard' && tabCache.dashboard.data) {
+            tabCache.dashboard.data.taps = taps;
+            tabCache.dashboard.data._tapsLoaded = true;
+            renderDashboard(tabCache.dashboard.data);
+        }
+    } catch (err) {
+        console.warn('预加载仓库列表失败:', err);
     }
 })();
 
@@ -274,6 +248,10 @@ function markCacheDirty(tab) {
 }
 
 // ===== Dashboard =====
+// Disk usage changes rarely within a session — keep it cached so switching
+// back to the dashboard doesn't re-show the skeleton on every visit
+let cachedDiskUsage = null;
+
 window.refreshDashboard = refreshDashboard;
 async function refreshDashboard(force) {
     if (force) {
@@ -284,78 +262,92 @@ async function refreshDashboard(force) {
     // If cache is valid, render immediately from cache
     if (isCacheValid(tabCache.dashboard)) {
         renderDashboard(tabCache.dashboard.data);
-        // Still refresh disk usage and outdated in background
-        Promise.allSettled([
-            Service.GetDiskUsage().then(diskUsage => {
-                if (currentTab === 'dashboard' && tabCache.dashboard.data) {
-                    tabCache.dashboard.data.diskUsage = diskUsage;
-                    tabCache.dashboard.data._diskLoaded = true;
-                    renderDashboard(tabCache.dashboard.data);
-                }
-            }).catch(() => {}),
-            refreshDashboardInBackground(),
-        ]);
+        // Still refresh disk usage, taps and outdated in background
+        refreshDashboardInBackground();
         return;
     }
 
     // Always render immediately with pre-loaded data (zero wait)
     const quickData = {
         packages: installedPackages,
-        diskUsage: {},
+        diskUsage: cachedDiskUsage || {},
+        taps: tabCache.taps.data || [],
         outdated: tabCache.outdated.data || [],
+        _tapsLoaded: !!tabCache.taps.data,
         _outdatedLoaded: !!tabCache.outdated.data,
-        _diskLoaded: false,
+        _diskLoaded: !!cachedDiskUsage,
     };
     tabCache.dashboard.data = quickData;
     tabCache.dashboard.timestamp = Date.now();
     renderDashboard(quickData);
     setDashboardRefreshing(true);
 
-    // Fetch everything in background (don't block initial render)
+    // Fetch everything in background (don't block initial render).
+    // Fast data (packages / disk / taps) is rendered in ONE pass once all
+    // three settle; the slow outdated check renders on its own when done —
+    // this keeps the dashboard from re-rendering (and visually "jumping")
+    // several times per tab switch.
     Promise.allSettled([
         Service.ListInstalled().then(packages => {
-            if (currentTab === 'dashboard' && tabCache.dashboard.data) {
-                tabCache.dashboard.data.packages = packages;
-                installedPackages = packages;
-                renderDashboard(tabCache.dashboard.data);
-            }
+            quickData.packages = packages;
+            installedPackages = packages;
         }).catch(() => {}),
         Service.GetDiskUsage().then(diskUsage => {
-            if (currentTab === 'dashboard' && tabCache.dashboard.data) {
-                tabCache.dashboard.data.diskUsage = diskUsage;
-                tabCache.dashboard.data._diskLoaded = true;
-                renderDashboard(tabCache.dashboard.data);
-            }
+            cachedDiskUsage = diskUsage;
+            quickData.diskUsage = diskUsage;
+            quickData._diskLoaded = true;
         }).catch(() => {}),
-        refreshDashboardInBackground(),
-    ]).finally(() => {
-        if (currentTab === 'dashboard') setDashboardRefreshing(false);
-    });
-}
-
-async function refreshDashboardInBackground() {
-    try {
-        const outdated = await Service.GetOutdated();
-        tabCache.dashboard.data.outdated = outdated;
-        tabCache.dashboard.data._outdatedLoaded = true;
+        Service.GetTaps().then(taps => {
+            quickData.taps = taps;
+            quickData._tapsLoaded = true;
+        }).catch(() => {}),
+    ]).then(() => {
         tabCache.dashboard.timestamp = Date.now();
-        // Only re-render if still on dashboard tab
+        setDashboardRefreshing(false);
         if (currentTab === 'dashboard') {
-            renderDashboard(tabCache.dashboard.data);
+            renderDashboard(quickData);
         }
-    } catch (err) {
-        // Silently fail for background refresh
-    }
+    });
+
+    // Slow outdated check renders on its own when it finishes
+    Service.GetOutdated().then(outdated => {
+        quickData.outdated = outdated;
+        quickData._outdatedLoaded = true;
+        tabCache.dashboard.timestamp = Date.now();
+        if (currentTab === 'dashboard') {
+            renderDashboard(quickData);
+        }
+    }).catch(() => {});
 }
 
-async function fetchDashboardData() {
-    // Parallel: all three Go calls run simultaneously
-    const [packages, outdated, diskUsage] = await Promise.all([
-        Service.ListInstalled(),
-        Service.GetOutdated(),
+// Background refresh used when the dashboard cache is already valid:
+// re-fetch disk / taps / outdated, then render ONCE when all settle
+async function refreshDashboardInBackground() {
+    const data = tabCache.dashboard.data;
+    if (!data) return;
+    const [diskUsage, taps, outdated] = await Promise.allSettled([
         Service.GetDiskUsage(),
+        Service.GetTaps(),
+        Service.GetOutdated(),
     ]);
-    return { packages, outdated, diskUsage };
+    if (diskUsage.status === 'fulfilled') {
+        cachedDiskUsage = diskUsage.value;
+        data.diskUsage = diskUsage.value;
+        data._diskLoaded = true;
+    }
+    if (taps.status === 'fulfilled') {
+        data.taps = taps.value;
+        data._tapsLoaded = true;
+    }
+    if (outdated.status === 'fulfilled') {
+        data.outdated = outdated.value;
+        data._outdatedLoaded = true;
+    }
+    tabCache.dashboard.timestamp = Date.now();
+    // Only re-render if still on dashboard tab
+    if (currentTab === 'dashboard') {
+        renderDashboard(data);
+    }
 }
 
 // Clicking a stat card jumps to the matching tab
@@ -375,29 +367,11 @@ function setDashboardRefreshing(on) {
     btn.disabled = on;
 }
 
-// Set a stat value with a subtle count-up animation (skipped on first paint)
+// Set a stat value directly (no count-up animation — numbers just update instantly)
 function setStatValue(el, value) {
     if (!el) return;
-    const prev = parseInt(el.dataset.value || '-1', 10);
     el.classList.remove('skeleton-text');
-    if (prev >= 0 && prev !== value) {
-        animateNumber(el, prev, value);
-    } else {
-        el.textContent = value;
-    }
-    el.dataset.value = value;
-}
-
-function animateNumber(el, from, to) {
-    const startTime = performance.now();
-    const duration = 450;
-    function tick(now) {
-        const progress = Math.min((now - startTime) / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3); // easeOutCubic
-        el.textContent = Math.round(from + (to - from) * eased);
-        if (progress < 1) requestAnimationFrame(tick);
-    }
-    requestAnimationFrame(tick);
+    el.textContent = value;
 }
 
 // Parse "1.2G" / "345M" / "12K" / "1.2 GB" style sizes into bytes
@@ -472,13 +446,22 @@ function renderDashboard(data) {
         : '加载中…';
 
     const diskBytes = computeTotalDisk(diskUsage);
-    const diskEl = document.getElementById('stat-disk');
-    if (data._diskLoaded) {
-        diskEl.classList.remove('skeleton-text');
-        diskEl.textContent = formatBytes(diskBytes);
+    const diskTotalEl = document.getElementById('disk-section-total');
+    if (diskTotalEl) {
+        if (data._diskLoaded) {
+            diskTotalEl.classList.remove('skeleton-text');
+            diskTotalEl.textContent = formatBytes(diskBytes);
+        } else {
+            diskTotalEl.textContent = '正在统计…';
+        }
     }
-    document.getElementById('stat-disk-sub').textContent =
-        data._diskLoaded ? 'Homebrew 目录占用' : '正在统计…';
+
+    // Repository (tap) stat
+    setStatValue(document.getElementById('stat-taps'), (data.taps || []).length);
+    const tapsSub = document.getElementById('stat-taps-sub');
+    tapsSub.textContent = data._tapsLoaded
+        ? ((data.taps || []).length === 0 ? '暂无仓库' : '点击查看')
+        : '加载中…';
 
     // Outdated badge (sidebar)
     const badge = document.getElementById('outdated-badge');
@@ -504,6 +487,9 @@ function renderDashboard(data) {
     } else {
         formulaBadge.style.display = 'none';
     }
+
+    // Sidebar badge for repository (tap) count
+    updateTapBadge((data.taps || []).length);
 
     renderDiskUsage(diskUsage, data._diskLoaded);
     renderOutdatedPreview(outdated, data._outdatedLoaded);
@@ -588,23 +574,18 @@ function renderOutdatedPreview(outdated, loaded) {
     }
 
     const top = outdated.slice(0, 5);
-    container.innerHTML = top.map((p, i) => {
+    container.innerHTML = top.map(p => {
         const icon = p.type === 'cask' ? CASK_ICON : FORMULA_ICON;
         const iconCls = p.type === 'cask' ? 'pkg-icon-cask' : 'pkg-icon-formula';
         return `
-        <div class="outdated-item" style="animation-delay:${i * 0.05}s;">
+        <div class="outdated-item">
             <div class="pkg-icon ${iconCls} pkg-icon-sm">${icon}</div>
             <span class="outdated-name" title="${escapeHtml(p.description || p.name)}">${escapeHtml(p.name)}</span>
             ${p.version ? `<span class="outdated-version">${escapeHtml(p.version)}</span>` : ''}
             ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="outdated-version outdated-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
             <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
         </div>`;
-    }).join('')
-        + (outdated.length > 5 ? `
-        <button class="outdated-more" onclick="switchTab('outdated')">
-            查看全部 ${outdated.length} 个
-            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>` : '');
+    }).join('');
 }
 
 // ===== Installed =====
@@ -724,8 +705,8 @@ function renderInstalled(type, packages) {
         }
         return;
     }
-    container.innerHTML = filtered.map((p, i) => `
-        <div class="pkg-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
+    container.innerHTML = filtered.map(p => `
+        <div class="pkg-item">
             <div class="pkg-icon pkg-icon-${type}">${isCask ? CASK_ICON : FORMULA_ICON}</div>
             <div class="pkg-main">
                 <div class="pkg-name-row">
@@ -736,6 +717,7 @@ function renderInstalled(type, packages) {
             </div>
             <div class="pkg-actions">
                 <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
+                ${type === 'formula' ? `<button class="btn btn-secondary btn-sm${p.pinned ? ' btn-pinned' : ''}" onclick="togglePin('${escapeHtml(p.name)}', ${p.pinned})">${p.pinned ? '解锁' : '锁定'}</button>` : ''}
                 <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${type}')">重装</button>
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${type}')">卸载</button>
             </div>
@@ -817,8 +799,8 @@ function renderSearchResults(results) {
             : `${results.length} 个结果`;
     }
 
-    container.innerHTML = results.slice(0, 50).map((r, i) => `
-        <div class="result-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
+    container.innerHTML = results.slice(0, 50).map(r => `
+        <div class="result-item">
             <div class="result-icon result-icon-${r.type}">${r.type === 'cask' ? CASK_ICON : FORMULA_ICON}</div>
             <div class="result-main">
                 <div class="result-name-row">
@@ -956,11 +938,11 @@ function renderOutdated(outdated) {
         return;
     }
 
-    container.innerHTML = filtered.map((p, i) => {
+    container.innerHTML = filtered.map(p => {
         const icon = p.type === 'cask' ? CASK_ICON : FORMULA_ICON;
         const iconCls = p.type === 'cask' ? 'pkg-icon-cask' : 'pkg-icon-formula';
         return `
-        <div class="pkg-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
+        <div class="pkg-item">
             <div class="pkg-icon ${iconCls}">${icon}</div>
             <div class="pkg-main">
                 <div class="pkg-name-row">
@@ -1190,24 +1172,29 @@ async function loadTapsInBackground() {
     }
 }
 
-function renderTaps(taps) {
-    // Update sidebar badge
+function updateTapBadge(count) {
     const tapBadge = document.getElementById('tap-count-badge');
-    if (taps.length > 0) {
+    if (!tapBadge) return;
+    if (count > 0) {
         tapBadge.style.display = 'inline';
-        tapBadge.textContent = taps.length;
+        tapBadge.textContent = count;
     } else {
         tapBadge.style.display = 'none';
     }
+}
+
+function renderTaps(taps) {
+    // Update sidebar badge
+    updateTapBadge(taps.length);
 
     const pageCount = document.getElementById('tap-page-count');
     if (pageCount) pageCount.textContent = taps.length + ' 个';
 
     document.getElementById('taps-list').innerHTML = taps.length > 0
-        ? taps.map((t, i) => {
+        ? taps.map(t => {
             const tapName = t.split(' ')[0];
             const rest = t.slice(tapName.length).trim();
-            return `<div class="tap-item" style="animation-delay:${Math.min(i * 0.03, 0.3)}s;">
+            return `<div class="tap-item">
                 <div class="tap-icon">${TAP_ICON}</div>
                 <div class="tap-main">
                     <span class="tap-name" title="${escapeHtml(t)}">${escapeHtml(tapName)}</span>
@@ -1472,6 +1459,23 @@ window.runVulnsQuick = function() {
 };
 
 // ===== Pin / Unpin =====
+window.togglePin = togglePin;
+async function togglePin(name, pinned) {
+    if (pinned) {
+        await unpinPackage(name);
+    } else {
+        await pinPackage(name);
+    }
+    // Refresh the installed list so the button state (锁定/解锁) updates
+    setTimeout(() => {
+        markCacheDirty('installed');
+        tabCache.installed.data = null;
+        tabCache.installed.timestamp = 0;
+        installedPackages = [];
+        loadInstalled(currentTab);
+    }, 300);
+}
+
 window.pinPackage = pinPackage;
 async function pinPackage(name) {
     showToast(`${name} 正在锁定...`, 'info');
@@ -1491,29 +1495,6 @@ async function unpinPackage(name) {
         showToast(`${name} 已解锁`, 'success');
     } catch (err) {
         showToast('解锁失败: ' + err.message, 'error');
-    }
-}
-
-// ===== Link / Unlink =====
-window.linkPackage = linkPackage;
-async function linkPackage(name) {
-    showToast(`${name} 正在链接...`, 'info');
-    try {
-        await Service.Link(name);
-        showToast(`${name} 已链接`, 'success');
-    } catch (err) {
-        showToast('链接失败: ' + err.message, 'error');
-    }
-}
-
-window.unlinkPackage = unlinkPackage;
-async function unlinkPackage(name) {
-    showToast(`${name} 正在取消链接...`, 'info');
-    try {
-        await Service.Unlink(name);
-        showToast(`${name} 已取消链接`, 'success');
-    } catch (err) {
-        showToast('取消链接失败: ' + err.message, 'error');
     }
 }
 

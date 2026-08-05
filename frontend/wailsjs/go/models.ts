@@ -8,6 +8,7 @@ export namespace main {
 	    type: string;
 	    outdated: boolean;
 	    installed: boolean;
+	    pinned: boolean;
 	    depends_on?: string[];
 	    install_time?: string;
 	
@@ -24,6 +25,7 @@ export namespace main {
 	        this.type = source["type"];
 	        this.outdated = source["outdated"];
 	        this.installed = source["installed"];
+	        this.pinned = source["pinned"];
 	        this.depends_on = source["depends_on"];
 	        this.install_time = source["install_time"];
 	    }

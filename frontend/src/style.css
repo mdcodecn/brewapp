@@ -415,6 +415,17 @@ body {
   color: #fff;
 }
 
+/* Pinned state: solid accent so the locked package stands out */
+.btn-pinned {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-pinned:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: #fff;
+}
+
 .btn-danger {
   background: var(--danger-dim);
   color: var(--danger);
@@ -480,9 +491,6 @@ body {
   font-weight: 600;
   color: var(--text-secondary);
   font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -503,11 +511,6 @@ body {
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
 /* ===== Stats Grid ===== */
 .stats-grid {
   display: grid;
@@ -525,12 +528,7 @@ body {
   gap: 14px;
   transition: transform 0.15s ease, background-color 0.15s ease;
   position: relative;
-  animation: fadeUp 0.35s ease backwards;
 }
-
-.stat-card:nth-child(2) { animation-delay: 0.05s; }
-.stat-card:nth-child(3) { animation-delay: 0.1s; }
-.stat-card:nth-child(4) { animation-delay: 0.15s; }
 
 .stat-card-clickable {
   cursor: pointer;
@@ -609,11 +607,7 @@ body {
   border-radius: 14px;
   padding: 20px;
   margin-bottom: 18px;
-  animation: fadeUp 0.35s ease backwards;
 }
-
-.dashboard-section:nth-of-type(2) { animation-delay: 0.08s; }
-.dashboard-section:nth-of-type(3) { animation-delay: 0.16s; }
 
 .dashboard-row .dashboard-section {
   margin-bottom: 0;
@@ -636,17 +630,50 @@ body {
   flex-shrink: 0;
 }
 
-.section-count {
+.view-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   margin-left: auto;
-  background: var(--accent-dim);
+  padding: 3px 5px 3px 12px;
+  border-radius: 999px;
+  background: transparent;
   color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.view-all:hover {
+  background: var(--accent-dim);
+}
+
+.view-all-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 9px;
-  border-radius: 999px;
-  min-width: 22px;
-  text-align: center;
   line-height: 1.5;
+}
+
+.disk-total {
+  margin-left: auto;
+  padding: 4px 12px;
+  background: var(--bg-primary);
+  border-radius: 999px;
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 /* ===== Disk Usage ===== */
@@ -664,7 +691,6 @@ body {
   background: var(--bg-primary);
   border-radius: 12px;
   transition: background-color 0.15s ease;
-  animation: fadeUp 0.3s ease backwards;
 }
 
 .disk-usage-item:hover {
@@ -765,7 +791,6 @@ body {
   padding: 10px 12px;
   background: var(--bg-primary);
   border-radius: 10px;
-  animation: fadeUp 0.3s ease backwards;
 }
 
 .outdated-item .outdated-name {
@@ -794,27 +819,6 @@ body {
   background: var(--warning-dim);
   font-size: 11px;
   font-weight: 500;
-}
-
-.outdated-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  margin-top: 4px;
-  padding: 9px;
-  background: transparent;
-  color: var(--accent);
-  font-size: 12px;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  border-radius: 9px;
-  transition: background-color 0.12s ease;
-}
-
-.outdated-more:hover {
-  background: var(--accent-dim);
 }
 
 .outdated-empty {
@@ -1006,7 +1010,6 @@ body {
   gap: 6px;
   padding: 56px 20px;
   text-align: center;
-  animation: fadeUp 0.3s ease backwards;
 }
 
 .empty-state-icon {
@@ -1104,7 +1107,6 @@ body {
   background: var(--bg-secondary);
   border-radius: 12px;
   transition: all 0.12s ease;
-  animation: fadeUp 0.3s ease backwards;
 }
 
 .result-item:hover {
@@ -1248,7 +1250,6 @@ body {
   border-radius: 12px;
   font-size: 13px;
   transition: all 0.12s ease;
-  animation: fadeUp 0.3s ease backwards;
 }
 
 .tap-item:hover {
@@ -1388,44 +1389,143 @@ body {
 }
 
 /* ===== Package Detail Modal ===== */
-.modal-lg {
-  width: 520px;
-  max-width: 90vw;
+.modal.modal-detail {
+  width: min(840px, 94vw);
+  max-width: 94vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
 }
 
-.detail-info-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+.modal-detail .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px 24px 24px;
+}
+
+.modal-detail .modal-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* Hero: icon + name + version, following the app's package-row style */
+.detail-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   margin-bottom: 14px;
 }
 
-.detail-info-item {
-  padding: 10px 12px;
-  background: var(--bg-primary);
-  border-radius: 10px;
+.pkg-icon-lg {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
 }
 
-.detail-info-item .label {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
+.pkg-icon-lg svg {
+  width: 24px;
+  height: 24px;
 }
 
-.detail-info-item .value {
-  font-size: 14px;
-  font-weight: 500;
-  margin-top: 3px;
+.detail-hero-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.detail-hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.detail-hero-name {
+  font-size: 20px;
+  font-weight: 700;
   color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.detail-hero-version {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.detail-desc {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+/* Full-width section cards, stacked vertically so uneven counts look natural */
+.detail-section {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
 }
 
 .detail-deps-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   margin-top: 12px;
+}
+
+/* Clickable dependency / dependent tags */
+.dep-tag-link {
+  cursor: pointer;
+  transition: transform 0.1s ease, filter 0.1s ease;
+}
+
+.dep-tag-link:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.15);
+}
+
+.rel-loading {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.rel-empty {
+  color: var(--text-muted);
+  font-size: 13px;
 }
 
 .dep-tag {
@@ -1497,7 +1597,6 @@ body {
 
 .config-result.show {
   display: block;
-  animation: fadeUp 0.25s ease;
 }
 
 .config-result-ok {
@@ -1755,7 +1854,6 @@ body {
   background: var(--bg-secondary);
   border-radius: 12px;
   transition: all 0.12s ease;
-  animation: fadeUp 0.3s ease backwards;
 }
 
 .pkg-item:hover {
