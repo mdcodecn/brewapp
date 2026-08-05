@@ -178,11 +178,14 @@
                 <div class="dashboard-row">
                     <div class="dashboard-section">
                         <h2>
-                            <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
-                            磁盘使用
-                            <span class="disk-total" id="disk-section-total">正在统计…</span>
+                            <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                            服务快捷管理
+                            <a class="view-all" onclick="switchTab('services')" title="查看全部服务">
+                                <span>查看全部</span>
+                                <span class="view-all-count" id="service-section-count">0/0</span>
+                            </a>
                         </h2>
-                        <div class="disk-usage-grid" id="disk-usage-grid"></div>
+                        <div id="services-preview" class="outdated-preview"></div>
                     </div>
                     <div class="dashboard-section">
                         <h2>
@@ -402,6 +405,16 @@
                                 <span class="settings-heading-desc">brew config 输出</span>
                             </h2>
                             <pre id="config-output" class="output-pre">加载中...</pre>
+                        </div>
+
+                        <!-- Disk Usage -->
+                        <div class="settings-section">
+                            <h2 class="settings-heading">
+                                <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                磁盘使用
+                                <span class="settings-heading-desc">Homebrew 目录占用</span>
+                            </h2>
+                            <div class="disk-usage-grid" id="disk-usage-grid"></div>
                         </div>
                     </div>
 

@@ -233,6 +233,15 @@ let installedLoaded = false;
     }
 })();
 
+// Pre-load disk usage on startup so the 配置页 disk section shows it instantly
+(async () => {
+    try {
+        cachedDiskUsage = await Service.GetDiskUsage();
+    } catch (err) {
+        console.warn('预加载磁盘使用失败:', err);
+    }
+})();
+
 // Cache TTL in milliseconds (5 minutes)
 const CACHE_TTL = 5 * 60 * 1000;
 
@@ -296,13 +305,11 @@ async function refreshDashboard(force) {
     // Always render immediately with pre-loaded data (zero wait)
     const quickData = {
         packages: installedPackages,
-        diskUsage: cachedDiskUsage || {},
         taps: tabCache.taps.data || [],
         outdated: tabCache.outdated.data || [],
         services: tabCache.services.data || [],
         _tapsLoaded: !!tabCache.taps.data,
         _outdatedLoaded: !!tabCache.outdated.data,
-        _diskLoaded: !!cachedDiskUsage,
         _servicesLoaded: !!tabCache.services.data,
     };
     tabCache.dashboard.data = quickData;
@@ -319,11 +326,6 @@ async function refreshDashboard(force) {
         Service.ListInstalled().then(packages => {
             quickData.packages = packages;
             installedPackages = packages;
-        }).catch(() => {}),
-        Service.GetDiskUsage().then(diskUsage => {
-            cachedDiskUsage = diskUsage;
-            quickData.diskUsage = diskUsage;
-            quickData._diskLoaded = true;
         }).catch(() => {}),
         Service.GetTaps().then(taps => {
             quickData.taps = taps;
@@ -360,17 +362,11 @@ async function refreshDashboard(force) {
 async function refreshDashboardInBackground() {
     const data = tabCache.dashboard.data;
     if (!data) return;
-    const [diskUsage, taps, outdated, services] = await Promise.allSettled([
-        Service.GetDiskUsage(),
+    const [taps, outdated, services] = await Promise.allSettled([
         Service.GetTaps(),
         Service.GetOutdated(),
         Service.ListServices(),
     ]);
-    if (diskUsage.status === 'fulfilled') {
-        cachedDiskUsage = diskUsage.value;
-        data.diskUsage = diskUsage.value;
-        data._diskLoaded = true;
-    }
     if (taps.status === 'fulfilled') {
         data.taps = taps.value;
         data._tapsLoaded = true;
@@ -426,19 +422,6 @@ function parseSize(str) {
     return parseFloat(m[1]) * mult;
 }
 
-function formatBytes(bytes) {
-    if (!bytes || bytes <= 0) return '-';
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let i = 0;
-    let v = bytes;
-    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
-    return (i === 0 ? v : v.toFixed(1)) + ' ' + units[i];
-}
-
-function computeTotalDisk(diskUsage) {
-    return Object.keys(diskUsage || {}).reduce((sum, k) => sum + parseSize(diskUsage[k]), 0);
-}
-
 const DISK_ICONS = {
     box: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>`,
     app: `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`,
@@ -473,7 +456,7 @@ function emptyStateHTML(icon, title, sub) {
 }
 
 function renderDashboard(data) {
-    const { packages, outdated, diskUsage } = data;
+    const { packages, outdated } = data;
 
     const formulas = packages.filter(p => p.type === 'formula');
     const casks = packages.filter(p => p.type === 'cask');
@@ -487,17 +470,6 @@ function renderDashboard(data) {
     outdatedSub.textContent = data._outdatedLoaded
         ? (outdated.length === 0 ? '已是最新' : '点击查看')
         : '加载中…';
-
-    const diskBytes = computeTotalDisk(diskUsage);
-    const diskTotalEl = document.getElementById('disk-section-total');
-    if (diskTotalEl) {
-        if (data._diskLoaded) {
-            diskTotalEl.classList.remove('skeleton-text');
-            diskTotalEl.textContent = formatBytes(diskBytes);
-        } else {
-            diskTotalEl.textContent = '正在统计…';
-        }
-    }
 
     // Repository (tap) stat
     setStatValue(document.getElementById('stat-taps'), (data.taps || []).length);
@@ -542,8 +514,8 @@ function renderDashboard(data) {
     // Sidebar badge for repository (tap) count
     updateTapBadge((data.taps || []).length);
 
-    renderDiskUsage(diskUsage, data._diskLoaded);
     renderOutdatedPreview(outdated, data._outdatedLoaded);
+    renderServicesPreview(data.services, data._servicesLoaded);
 }
 
 // ===== Disk Usage =====
@@ -1407,6 +1379,7 @@ function renderServices(services) {
     container.innerHTML = filtered.map(sv => {
         const st = SERVICE_STATUS[sv.status] || SERVICE_STATUS.unknown;
         const iconCls = sv.status === 'started' ? 'pkg-icon-formula' : 'pkg-icon-cask';
+        const running = sv.status === 'started';
         return `
         <div class="pkg-item">
             <div class="pkg-icon ${iconCls}">${SERVICE_ICON}</div>
@@ -1420,28 +1393,14 @@ function renderServices(services) {
                 ${sv.file ? `<span class="pkg-desc" title="${escapeHtml(sv.file)}">${escapeHtml(sv.file)}</span>` : ''}
                 ${sv.user ? `<span class="service-user">用户：${escapeHtml(sv.user)}</span>` : ''}
             </div>
-            <div class="pkg-actions">${serviceActions(sv)}</div>
+            <div class="pkg-actions">
+                <label class="switch" title="${running ? '停止服务（取消登录自启）' : '启动服务（注册登录自启）'}">
+                    <input type="checkbox" data-service="${escapeHtml(sv.name)}" ${running ? 'checked' : ''} onchange="toggleService(this)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                </label>
+            </div>
         </div>`;
     }).join('');
-}
-
-// Context-aware action buttons based on the service status
-function serviceActions(sv) {
-    const name = escapeHtml(sv.name);
-    if (sv.status === 'started') {
-        return `
-            <button class="btn btn-warning btn-sm" onclick="stopService('${name}')">停止</button>
-            <button class="btn btn-secondary btn-sm" onclick="restartService('${name}')">重启</button>`;
-    }
-    if (sv.status === 'error') {
-        return `
-            <button class="btn btn-secondary btn-sm" onclick="restartService('${name}')">重启</button>
-            <button class="btn btn-danger btn-sm" onclick="stopService('${name}')">停止</button>`;
-    }
-    // stopped / none: offer a permanent start and a temporary run
-    return `
-        <button class="btn btn-primary btn-sm" onclick="startService('${name}')">启动</button>
-        <button class="btn btn-secondary btn-sm" onclick="runService('${name}')">运行</button>`;
 }
 
 // After a service action, invalidate caches and reload the list
@@ -1449,75 +1408,95 @@ function reloadServices() {
     markCacheDirty('services');
     tabCache.services.data = null;
     tabCache.services.timestamp = 0;
-    setTimeout(() => loadServices(), 400);
+    setTimeout(() => {
+        if (currentTab === 'dashboard') {
+            refreshDashboard();
+        } else {
+            loadServices();
+        }
+    }, 400);
 }
 
-window.startService = startService;
-async function startService(name) {
-    showModalLoading(
-        '确认启动服务',
-        `确定要启动服务 <strong>${escapeHtml(name)}</strong> 吗？<br>启动后将注册为登录时自动运行。`,
-        async () => {
-            try {
-                await Service.StartService(name);
-                reloadServices();
-                return `服务 ${name} 已启动`;
-            } catch (err) {
-                throw new Error(`启动失败: ${err.message}`);
-            }
-        }
-    );
+// Dashboard quick-management preview: top services with inline switches
+function renderServicesPreview(services, loaded) {
+    const container = document.getElementById('services-preview');
+    const countEl = document.getElementById('service-section-count');
+    if (!container) return;
+
+    if (!loaded) {
+        if (countEl) countEl.textContent = '…';
+        container.innerHTML = `<div class="services-preview-grid">${Array.from({ length: 3 }, () => `
+            <div class="service-chip">
+                <div class="skeleton" style="width:70px;height:11px;"></div>
+                <div class="skeleton" style="width:34px;height:20px;border-radius:999px;"></div>
+            </div>`).join('')}</div>`;
+        return;
+    }
+
+    const list = services || [];
+    const running = list.filter(s => s.status === 'started').length;
+    if (countEl) countEl.textContent = `${running}/${list.length}`;
+
+    if (list.length === 0) {
+        container.innerHTML = `
+            <div class="outdated-empty services-empty">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                <span>暂无服务</span>
+            </div>`;
+        return;
+    }
+
+    // Compact quick management: wrapping chips, each with name + mini switch,
+    // so several services fit side-by-side instead of filling the column vertically
+    const top = list.slice(0, 8);
+    container.innerHTML = `<div class="services-preview-grid">${top.map(sv => {
+        const isRunning = sv.status === 'started';
+        return `
+            <div class="service-chip${isRunning ? ' is-running' : ''}" title="${escapeHtml(sv.name)}">
+                <span class="service-chip-name">${escapeHtml(sv.name)}</span>
+                <label class="switch switch-sm" title="${isRunning ? '停止服务（取消登录自启）' : '启动服务（注册登录自启）'}">
+                    <input type="checkbox" data-service="${escapeHtml(sv.name)}" ${isRunning ? 'checked' : ''} onchange="toggleService(this)">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                </label>
+            </div>`;
+    }).join('')}</div>`;
 }
 
-window.stopService = stopService;
-async function stopService(name) {
-    showModalLoading(
-        '确认停止服务',
-        `确定要停止服务 <strong>${escapeHtml(name)}</strong> 吗？<br>停止后将取消登录时自动运行。`,
-        async () => {
-            try {
-                await Service.StopService(name);
-                reloadServices();
-                return `服务 ${name} 已停止`;
-            } catch (err) {
-                throw new Error(`停止失败: ${err.message}`);
-            }
-        }
-    );
-}
+// Sliding switch: ON = start (register at login), OFF = stop (unregister)
+let servicesBusy = false;
 
-window.restartService = restartService;
-async function restartService(name) {
-    showModalLoading(
-        '确认重启服务',
-        `确定要重启服务 <strong>${escapeHtml(name)}</strong> 吗？`,
-        async () => {
-            try {
-                await Service.RestartService(name);
-                reloadServices();
-                return `服务 ${name} 已重启`;
-            } catch (err) {
-                throw new Error(`重启失败: ${err.message}`);
-            }
-        }
-    );
-}
+window.toggleService = toggleService;
+async function toggleService(input) {
+    // Ignore toggles while another service operation is in flight
+    if (servicesBusy) {
+        input.checked = !input.checked;
+        return;
+    }
 
-window.runService = runService;
-async function runService(name) {
-    showModalLoading(
-        '确认运行服务',
-        `确定要以临时方式运行服务 <strong>${escapeHtml(name)}</strong> 吗？<br>仅本次运行，不会注册登录自启。`,
-        async () => {
-            try {
-                await Service.RunService(name);
-                reloadServices();
-                return `服务 ${name} 已运行`;
-            } catch (err) {
-                throw new Error(`运行失败: ${err.message}`);
-            }
+    const name = input.dataset.service;
+    const on = input.checked;
+    servicesBusy = true;
+
+    // Lock every switch on the page (services tab + dashboard preview) while the operation runs
+    const switches = document.querySelectorAll('.switch input');
+    switches.forEach(i => { i.disabled = true; });
+
+    showToast(`正在${on ? '启动' : '停止'} ${name}...`, 'info');
+    try {
+        if (on) {
+            await Service.StartService(name);
+        } else {
+            await Service.StopService(name);
         }
-    );
+        showToast(`服务 ${name} 已${on ? '启动' : '停止'}`, 'success');
+        reloadServices();
+    } catch (err) {
+        // Revert the switch and re-enable the list
+        input.checked = !on;
+        switches.forEach(i => { i.disabled = false; });
+        showToast(`${on ? '启动' : '停止'}失败: ${err.message}`, 'error');
+    }
+    servicesBusy = false;
 }
 
 // ===== Utility =====
@@ -1697,17 +1676,42 @@ window.runDoctorQuick = function() {
 
 // ===== Config =====
 async function loadConfig() {
+    // Environment info (cache-aware)
     if (isCacheValid(tabCache.config)) {
         document.getElementById('config-output').textContent = tabCache.config.data || '';
-        return;
+    } else {
+        try {
+            const result = await Service.Config();
+            document.getElementById('config-output').textContent = result || '暂无配置信息';
+            tabCache.config.data = result;
+            tabCache.config.timestamp = Date.now();
+        } catch (err) {
+            document.getElementById('config-output').textContent = '加载配置失败: ' + err.message;
+        }
+    }
+
+    // Disk usage lives on the config page now
+    loadDiskUsage();
+}
+
+async function loadDiskUsage() {
+    const grid = document.getElementById('disk-usage-grid');
+    if (!grid) return;
+
+    // Render from cache instantly (if any), otherwise show skeletons
+    if (cachedDiskUsage && Object.keys(cachedDiskUsage).length > 0) {
+        renderDiskUsage(cachedDiskUsage, true);
+    } else {
+        renderDiskUsage(null, false);
     }
     try {
-        const result = await Service.Config();
-        document.getElementById('config-output').textContent = result || '暂无配置信息';
-        tabCache.config.data = result;
-        tabCache.config.timestamp = Date.now();
+        const diskUsage = await Service.GetDiskUsage();
+        cachedDiskUsage = diskUsage;
+        if (currentTab === 'config') {
+            renderDiskUsage(diskUsage, true);
+        }
     } catch (err) {
-        document.getElementById('config-output').textContent = '加载配置失败: ' + err.message;
+        grid.innerHTML = '<div class="disk-empty">磁盘数据加载失败</div>';
     }
 }
 

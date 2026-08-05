@@ -2001,10 +2001,118 @@ body {
 .status-error   { background: var(--danger-dim); color: var(--danger); }
 .status-none    { background: var(--bg-tertiary); color: var(--text-secondary); }
 
+/* Neutral empty state for the dashboard services preview */
+.outdated-empty.services-empty {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Compact dashboard services quick management: fixed 3-column grid */
+.services-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.service-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px 5px 12px;
+  background: var(--bg-primary);
+  border-radius: 10px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.service-chip-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.service-chip.is-running .service-chip-name {
+  color: var(--success);
+}
+
 .service-user {
   font-size: 11px;
   color: var(--text-muted);
   font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+}
+
+/* iOS-style sliding switch */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+}
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-hover);
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+.switch-thumb {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s cubic-bezier(0.3, 0.9, 0.4, 1);
+}
+
+.switch input:checked ~ .switch-track {
+  background: var(--success);
+}
+
+.switch input:checked ~ .switch-track .switch-thumb {
+  transform: translateX(16px);
+}
+
+.switch input:focus-visible ~ .switch-track {
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.switch input:disabled ~ .switch-track {
+  opacity: 0.5;
+}
+
+/* Smaller switch variant for the dashboard service chips */
+.switch-sm {
+  width: 34px;
+  height: 20px;
+}
+
+.switch-sm .switch-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.switch-sm input:checked ~ .switch-track .switch-thumb {
+  transform: translateX(14px);
 }
 
 /* ===== Scrollbar ===== */
