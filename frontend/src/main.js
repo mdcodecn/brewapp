@@ -30,7 +30,7 @@ function switchTab(tab) {
 
     // Load data for the tab (uses cache, refreshes in background)
     if (tab === 'dashboard') refreshDashboard();
-    else if (tab === 'installed-cask' || tab === 'installed-formula') loadInstalled(tab);
+    else if (tab === 'installed') loadInstalled(tab);
     else if (tab === 'outdated') loadOutdated();
     else if (tab === 'services') loadServices();
     else if (tab === 'taps') loadTaps();
@@ -206,6 +206,7 @@ let installedLoaded = false;
         installedLoaded = true;
         tabCache.installed.data = installedPackages;
         tabCache.installed.timestamp = Date.now();
+        updateInstalledCounts();
     } catch (err) {
         console.warn('预加载已安装包失败:', err);
     }
@@ -270,7 +271,7 @@ function isCacheValid(cache) {
 
 function markCacheDirty(tab) {
     // When a user action changes data, invalidate the cache for affected tabs
-    if ((tab === 'installed-cask' || tab === 'installed-formula') || tab === 'dashboard') {
+    if ((tab === 'installed') || tab === 'dashboard') {
         tabCache.dashboard.data = null;
         tabCache.dashboard.timestamp = 0;
         tabCache.installed.data = null;
@@ -442,7 +443,11 @@ async function refreshDashboardInBackground() {
     if (!grid) return;
     grid.addEventListener('click', (e) => {
         const card = e.target.closest('.stat-card-clickable');
-        if (card && card.dataset.tabTarget) switchTab(card.dataset.tabTarget);
+        if (card && card.dataset.tabTarget) {
+            // Stat cards may pre-select a type inside the merged 已安装 tab
+            if (card.dataset.tabType) setInstalledType(card.dataset.tabType);
+            switchTab(card.dataset.tabTarget);
+        }
     });
 })();
 
@@ -509,8 +514,77 @@ function emptyStateHTML(icon, title, sub) {
     </div>`;
 }
 
+// 顶层筛选默认开启（只显示手动安装的顶层包）
 let leavesOnly = true;
 let cachedLeaves = null;
+
+// Active type inside the merged "已安装" tab: all / formula / cask，默认全部
+let installedType = 'all';
+const installedSearch = { all: '', formula: '', cask: '' };
+
+// updateInstalledCounts refreshes dashboard stats, sidebar badge and the
+// type-switch counts from the current installedPackages snapshot.
+// 顶层筛选开启时，formula 相关统计只统计顶层包，保持与列表一致。
+function updateInstalledCounts() {
+    const formulas = installedPackages.filter(p => p.type === 'formula');
+    const casks = installedPackages.filter(p => p.type === 'cask');
+
+    // Formula 数量跟随顶层筛选（cask 不受影响）
+    const formulaCount = leavesOnly && cachedLeaves
+        ? formulas.filter(f => cachedLeaves.includes(f.name)).length
+        : formulas.length;
+
+    // Dashboard stats (命令行 stat 同样跟随顶层筛选)
+    setStatValue(document.getElementById('stat-formulas'), formulaCount);
+    setStatValue(document.getElementById('stat-casks'), casks.length);
+
+    // Sidebar badge: 已安装总数（全部包，保持稳定）
+    const total = casks.length + formulas.length;
+    const badge = document.getElementById('installed-count-badge');
+    if (badge) {
+        badge.style.display = total > 0 ? 'inline' : 'none';
+        badge.textContent = total;
+    }
+
+    // Type-switch counts: 全部=总数；命令行计数跟随顶层筛选，保证与列表一致
+    const ac = document.getElementById('switch-all-count');
+    if (ac) ac.textContent = total > 0 ? String(total) : '';
+    const fc = document.getElementById('switch-formula-count');
+    if (fc) fc.textContent = formulaCount > 0 ? String(formulaCount) : '';
+    const cc = document.getElementById('switch-cask-count');
+    if (cc) cc.textContent = casks.length > 0 ? String(casks.length) : '';
+}
+
+// setInstalledType switches the merged tab between all / formula / cask view
+window.setInstalledType = setInstalledType;
+function setInstalledType(type) {
+    if (type === installedType) return;
+    installedType = type;
+
+    // Sliding thumb + active class
+    const sw = document.getElementById('installed-type-switch');
+    if (sw) sw.dataset.active = type;
+    document.querySelectorAll('#installed-type-switch .type-switch-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.type === type);
+    });
+
+    // 顶层筛选只在命令行视图下显示（全部/应用视图不受其影响）
+    const lw = document.getElementById('leaves-toggle-wrap');
+    if (lw) lw.style.display = type === 'formula' ? '' : 'none';
+
+    // Per-type search value + placeholder
+    const input = document.getElementById('installed-search');
+    if (input) {
+        input.placeholder = type === 'cask' ? '搜索已安装的应用…'
+            : type === 'formula' ? '搜索已安装的命令行…'
+            : '搜索已安装的软件包…';
+        input.value = installedSearch[type];
+        input.focus();
+        input.select();
+    }
+
+    renderInstalled(type, installedPackages);
+}
 
 // Pre-fetch leaves on startup so dashboard/formula counts are correct immediately
 (async () => {
@@ -518,6 +592,10 @@ let cachedLeaves = null;
         cachedLeaves = await Service.GetLeaves();
         if (installedPackages.length > 0) {
             updateFormulaStat();
+        }
+        // 顶层列表到达后刷新统计，并在已安装页时同步重绘列表
+        if (currentTab === 'installed') {
+            renderInstalled(installedType, installedPackages);
         }
     } catch (err) {
         console.warn('预加载顶层包列表失败:', err);
@@ -531,8 +609,8 @@ function toggleLeavesFilter() {
     if (leavesOnly && !cachedLeaves) {
         Service.GetLeaves().then(list => {
             cachedLeaves = list;
-            renderInstalled('formula', installedPackages);
-            updateFormulaStat();
+            if (currentTab === 'installed') renderInstalled(installedType, installedPackages);
+            updateInstalledCounts();
         }).catch(err => {
             showToast('获取顶层包列表失败: ' + err.message, 'error');
             leavesOnly = false;
@@ -540,8 +618,8 @@ function toggleLeavesFilter() {
         });
         return;
     }
-    renderInstalled('formula', installedPackages);
-    updateFormulaStat();
+    if (currentTab === 'installed') renderInstalled(installedType, installedPackages);
+    updateInstalledCounts();
     // Also refresh outdated/dashboard if on those tabs
     if (currentTab === 'outdated' && tabCache.outdated.data) {
         renderOutdated(tabCache.outdated.data);
@@ -549,19 +627,19 @@ function toggleLeavesFilter() {
     if (currentTab === 'dashboard') {
         refreshDashboard();
     }
+    // 更新徽标同样受顶层筛选影响，无论当前在哪个 tab 都同步
+    if (tabCache.outdated.data) {
+        const oc = outdatedTopLevelCount(tabCache.outdated.data);
+        const ob = document.getElementById('outdated-badge');
+        if (ob) {
+            ob.style.display = oc > 0 ? 'inline' : 'none';
+            ob.textContent = oc;
+        }
+    }
 }
 
 function updateFormulaStat() {
-    const formulas = installedPackages.filter(p => p.type === 'formula');
-    const count = leavesOnly && cachedLeaves
-        ? formulas.filter(f => cachedLeaves.includes(f.name)).length
-        : formulas.length;
-    setStatValue(document.getElementById('stat-formulas'), count);
-    const badge = document.getElementById('formula-count-badge');
-    if (badge) {
-        badge.style.display = count > 0 ? 'inline' : 'none';
-        badge.textContent = count;
-    }
+    updateInstalledCounts();
 }
 
 function outdatedTopLevelCount(outdated) {
@@ -572,11 +650,9 @@ function outdatedTopLevelCount(outdated) {
 function renderDashboard(data) {
     const { packages, outdated } = data;
 
-    const casks = packages.filter(p => p.type === 'cask');
-
-    // Stats cards — formula stat respects leaves filter
-    updateFormulaStat();
-    setStatValue(document.getElementById('stat-casks'), casks.length);
+    // Stats cards — formula stat respects leaves filter, and sidebar badge +
+    // type-switch counts all come from updateInstalledCounts()
+    updateInstalledCounts();
     setStatValue(document.getElementById('stat-taps'), (data.taps || []).length);
 
     // Disk stat: total Homebrew directory usage (Cellar + Caskroom + Cache)
@@ -590,15 +666,6 @@ function renderDashboard(data) {
         badge.textContent = outdatedCount;
     } else {
         badge.style.display = 'none';
-    }
-
-    // Sidebar badges for cask (formula badge is handled by updateFormulaStat)
-    const caskBadge = document.getElementById('cask-count-badge');
-    if (casks.length > 0) {
-        caskBadge.style.display = 'inline';
-        caskBadge.textContent = casks.length;
-    } else {
-        caskBadge.style.display = 'none';
     }
 
     // Sidebar badge for repository (tap) count
@@ -665,7 +732,7 @@ function renderOutdatedPreview(outdated, loaded) {
 
 // ===== Installed =====
 async function loadInstalled(tab) {
-    const type = tab === 'installed-cask' ? 'cask' : 'formula';
+    const type = installedType;
     // Wait for pre-load to complete, then render
     if (installedPackages.length === 0) {
         // Not yet loaded, show loading state
@@ -683,8 +750,9 @@ async function loadInstalledInBackground(type) {
         installedLoaded = true;
         tabCache.installed.data = packages;
         tabCache.installed.timestamp = Date.now();
-        if (currentTab === 'installed-cask' || currentTab === 'installed-formula') {
-            renderInstalled(type, packages);
+        updateInstalledCounts();
+        if (currentTab === 'installed') {
+            renderInstalled(installedType, packages);
         }
     } catch (err) {
         // Silently fail for background refresh
@@ -698,8 +766,8 @@ function spinRefreshBtn(btn, on) {
 }
 
 window.refreshInstalled = refreshInstalled;
-async function refreshInstalled(type) {
-    const btn = document.getElementById(type === 'cask' ? 'installed-cask-refresh' : 'installed-formula-refresh');
+async function refreshInstalled() {
+    const btn = document.getElementById('installed-refresh');
     spinRefreshBtn(btn, true);
     try {
         const packages = await Service.ListInstalled();
@@ -707,8 +775,9 @@ async function refreshInstalled(type) {
         installedLoaded = true;
         tabCache.installed.data = packages;
         tabCache.installed.timestamp = Date.now();
-        renderInstalled(type, packages);
-        showToast(type === 'cask' ? '应用列表已刷新' : '命令行列表已刷新', 'success');
+        renderInstalled(installedType, packages);
+        updateInstalledCounts();
+        showToast('已安装列表已刷新', 'success');
     } catch (err) {
         showToast('刷新失败: ' + err.message, 'error');
     }
@@ -732,19 +801,22 @@ async function refreshOutdated() {
 }
 
 function renderInstalled(type, packages) {
-    const searchInputId = type === 'cask' ? 'installed-cask-search' : 'installed-formula-search';
-    const containerId = type === 'cask' ? 'cask-list' : 'formula-list';
-    const isCask = type === 'cask';
-    const search = document.getElementById(searchInputId).value.toLowerCase();
+    const search = (document.getElementById('installed-search')?.value || '').toLowerCase();
     const filtered = packages.filter(p => {
-        if (p.type !== type) return false;
-        if (leavesOnly && type === 'formula' && cachedLeaves && !cachedLeaves.includes(p.name)) return false;
+        // 全部视图不做类型过滤，展示所有包
+        if (type !== 'all' && p.type !== type) return false;
+        // 顶层筛选只在命令行视图生效；全部视图展示所有
+        if (type === 'formula' && leavesOnly && cachedLeaves && !cachedLeaves.includes(p.name)) return false;
         if (!search) return true;
         return p.name.toLowerCase().includes(search) ||
                (p.description && p.description.toLowerCase().includes(search));
     });
 
-    const container = document.getElementById(containerId);
+    const container = document.getElementById('installed-list');
+    if (!container) return;
+
+    const typeLabel = type === 'cask' ? '应用' : type === 'formula' ? '命令行' : '软件包';
+
     if (filtered.length === 0) {
         if (packages.length === 0 && !installedLoaded) {
             // Still loading — show skeletons
@@ -765,12 +837,13 @@ function renderInstalled(type, packages) {
             container.innerHTML = emptyStateHTML(
                 SEARCH_OFF_ICON,
                 '未找到匹配的包',
-                `没有名称或描述包含「${search}」的${isCask ? '应用' : '命令行'}`
+                `没有名称或描述包含「${search}」的${typeLabel}`
             );
         } else {
+            const icon = type === 'cask' ? CASK_ICON : type === 'formula' ? FORMULA_ICON : CASK_ICON;
             container.innerHTML = emptyStateHTML(
-                isCask ? CASK_ICON : FORMULA_ICON,
-                isCask ? '尚未安装任何应用' : '尚未安装任何命令行',
+                icon,
+                type === 'all' ? '尚未安装任何软件包' : `尚未安装任何${typeLabel}`,
                 '前往「搜索」页面查找并安装软件包'
             );
         }
@@ -778,7 +851,7 @@ function renderInstalled(type, packages) {
     }
     container.innerHTML = filtered.map(p => `
         <div class="pkg-item">
-            <div class="pkg-icon pkg-icon-${type}">${isCask ? CASK_ICON : FORMULA_ICON}</div>
+            <div class="pkg-icon pkg-icon-${p.type}">${p.type === 'cask' ? CASK_ICON : FORMULA_ICON}</div>
             <div class="pkg-main">
                 <div class="pkg-name-row">
                     <span class="pkg-name">${escapeHtml(p.name)}</span>
@@ -788,17 +861,19 @@ function renderInstalled(type, packages) {
             </div>
             <div class="pkg-actions">
                 <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
-                ${type === 'formula' ? `<button class="btn btn-secondary btn-sm${p.pinned ? ' btn-pinned' : ''}" onclick="togglePin('${escapeHtml(p.name)}', ${p.pinned})">${p.pinned ? '解锁' : '锁定'}</button><button class="btn btn-secondary btn-sm" onclick="linkPackage('${escapeHtml(p.name)}')" title="链接到 /usr/local">链接</button><button class="btn btn-secondary btn-sm" onclick="unlinkPackage('${escapeHtml(p.name)}')" title="取消链接">断开</button>` : ''}
-                <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${type}')">重装</button>
-                <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${type}')">卸载</button>
+                ${p.type === 'formula' ? `<button class="btn btn-secondary btn-sm${p.pinned ? ' btn-pinned' : ''}" onclick="togglePin('${escapeHtml(p.name)}', ${p.pinned})">${p.pinned ? '解锁' : '锁定'}</button><button class="btn btn-secondary btn-sm" onclick="linkPackage('${escapeHtml(p.name)}')" title="链接到 /usr/local">链接</button><button class="btn btn-secondary btn-sm" onclick="unlinkPackage('${escapeHtml(p.name)}')" title="取消链接">断开</button>` : ''}
+                <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${p.type}')">重装</button>
+                <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${p.type}')">卸载</button>
             </div>
         </div>
     `).join('');
 }
 
 window.filterInstalled = filterInstalled;
-function filterInstalled(type) {
-    renderInstalled(type, installedPackages);
+function filterInstalled() {
+    const input = document.getElementById('installed-search');
+    if (input) installedSearch[installedType] = input.value;
+    renderInstalled(installedType, installedPackages);
 }
 
 window.reinstallPackage = reinstallPackage;

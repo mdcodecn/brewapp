@@ -196,26 +196,27 @@ body {
 
 .sidebar-nav {
   flex: 1;
-  padding: 6px 12px 16px;
+  padding: 8px 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .sidebar-divider {
   height: 1px;
   background: var(--divider);
-  margin: 10px 10px;
+  margin: 10px 12px;
 }
 
+/* Top-level nav buttons: soft pill items with a gradient active state */
 .nav-item {
   display: flex;
   align-items: center;
   gap: 11px;
-  padding: 8px 12px;
+  padding: 9px 12px;
   /* 固定行高：数量徽标（display:none ↔ inline）出现/消失时不会改变行高，
      避免侧边栏加载数量后整列条目被撑高、下方条目发生位移 */
-  min-height: 35px;
+  min-height: 38px;
   white-space: nowrap;
   overflow: hidden;
   background: transparent;
@@ -223,9 +224,9 @@ body {
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
-  border-radius: 9px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.1s ease;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
   text-align: left;
   position: relative;
   -webkit-appearance: none;
@@ -235,43 +236,53 @@ body {
 }
 
 .nav-item:hover {
-  background: var(--bg-tertiary);
+  background: rgba(0, 0, 0, 0.05);
   color: var(--text-primary);
 }
 
+.nav-item:active {
+  transform: scale(0.975);
+}
+
 .nav-item.active {
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: linear-gradient(135deg, #0a84ff, #0060df);
+  color: #fff;
+  /* global rule sets box-shadow: none !important, so re-enable here */
+  box-shadow: 0 3px 10px rgba(10, 132, 255, 0.35) !important;
 }
 
 .nav-item svg {
   width: 16px;
   height: 16px;
   flex-shrink: 0;
-  opacity: 0.75;
+  opacity: 0.85;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.nav-item:hover svg {
+  opacity: 1;
 }
 
 .nav-item.active svg {
+  color: #fff;
   opacity: 1;
-  color: var(--accent);
 }
 
-/* 侧边栏图标彩色标识（macOS 风格色板）
-   选中态背景仍为浅蓝，图标保持各自彩色 */
-.nav-item[data-tab="dashboard"] svg { color: #0071e3; }
-.nav-item[data-tab="search"] svg { color: #34c759; }
-.nav-item[data-tab="installed-cask"] svg { color: #5e5ce6; }
-.nav-item[data-tab="installed-formula"] svg { color: #30b0c7; }
-.nav-item[data-tab="outdated"] svg { color: #ff9500; }
-.nav-item[data-tab="services"] svg { color: #ff2d55; }
-.nav-item[data-tab="taps"] svg { color: #af52de; }
-.nav-item[data-tab="config"] svg { color: #8e8e93; }
+/* 侧边栏图标彩色标识（macOS 风格色板），仅在非选中态生效
+   选中态为白色图标 + 蓝色渐变底 */
+.nav-item[data-tab="dashboard"]:not(.active) svg { color: #0071e3; }
+.nav-item[data-tab="search"]:not(.active) svg { color: #34c759; }
+.nav-item[data-tab="installed"]:not(.active) svg { color: #5e5ce6; }
+.nav-item[data-tab="outdated"]:not(.active) svg { color: #ff9500; }
+.nav-item[data-tab="services"]:not(.active) svg { color: #ff2d55; }
+.nav-item[data-tab="taps"]:not(.active) svg { color: #af52de; }
+.nav-item[data-tab="config"]:not(.active) svg { color: #8e8e93; }
 
 .nav-item .badge {
   margin-left: auto;
   /* 徽标不参与收缩，避免数字变大时挤压/换行改变布局 */
   flex-shrink: 0;
-  background: var(--bg-tertiary);
+  background: rgba(0, 0, 0, 0.06);
   color: var(--text-secondary);
   font-size: 10px;
   font-weight: 600;
@@ -282,8 +293,12 @@ body {
   line-height: 1.45;
 }
 
+.nav-item:hover .badge {
+  background: rgba(0, 0, 0, 0.09);
+}
+
 .nav-item.active .badge {
-  background: var(--accent);
+  background: rgba(255, 255, 255, 0.24);
   color: #fff;
 }
 
@@ -2515,6 +2530,179 @@ body {
   font-weight: 600;
   color: var(--text-secondary);
 }
+
+/* ===== macOS-style toggle switch ===== */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 22px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.switch-sm {
+  width: 32px;
+  height: 20px;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.switch-track {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.16);
+  border-radius: 999px;
+  transition: background 0.2s ease;
+  pointer-events: none;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border-radius: 50%;
+  /* global rule sets box-shadow: none !important, so re-enable here */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+  transition: transform 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.switch-sm .switch-thumb {
+  width: 16px;
+  height: 16px;
+}
+
+.switch input:checked + .switch-track {
+  background: var(--success);
+}
+
+.switch input:checked + .switch-track .switch-thumb {
+  transform: translateX(12px);
+}
+
+.switch:hover input:not(:checked) + .switch-track {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+/* ===== Installed type switch (segmented control with sliding thumb) ===== */
+.type-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  padding: 3px;
+  min-width: 300px;
+}
+
+.type-switch-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  width: calc(33.333% - 2px);
+  background: #fff;
+  border-radius: 8px;
+  /* global rule sets box-shadow: none !important, so re-enable here */
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14) !important;
+  transition: transform 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
+}
+
+/* 三档：全部（0）→ 命令行（100%）→ 应用（200%） */
+.type-switch[data-active="formula"] .type-switch-thumb {
+  transform: translateX(100%);
+}
+
+.type-switch[data-active="cask"] .type-switch-thumb {
+  transform: translateX(200%);
+}
+
+.type-switch-btn {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.18s ease;
+  -webkit-appearance: none;
+  appearance: none;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.type-switch-btn:hover {
+  color: var(--text-primary);
+}
+
+.type-switch-btn.active {
+  color: var(--accent);
+}
+
+.type-switch-btn svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.type-switch-count {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  min-width: 14px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.type-switch-count:not(:empty) {
+  opacity: 1;
+}
+
+.type-switch-btn.active .type-switch-count {
+  color: var(--accent);
+}
+
+/* ===== 已安装页工具栏：搜索框保持原样，顶层开关放到同一行的右端 ===== */
+.installed-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+/* 搜索框样式保持不变（宽度/位置与其它页面一致），仅去掉自身下边距 */
+.installed-toolbar .list-search {
+  margin-bottom: 0;
+}
+
+.installed-toolbar .leaves-toggle {
+  margin-left: auto;
+}
+
 
 /* ===== Scrollbar ===== */
 .main-content::-webkit-scrollbar,

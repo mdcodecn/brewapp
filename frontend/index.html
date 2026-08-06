@@ -43,26 +43,13 @@
                     </svg>
                     <span>搜索</span>
                 </button>
-                <button class="nav-item" data-tab="installed-cask">
+                <button class="nav-item" data-tab="installed">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>
                     </svg>
-                    <span>应用</span>
-                    <span class="badge" id="cask-count-badge" style="display:none;">0</span>
-                </button>
-                <button class="nav-item" data-tab="installed-formula">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-                    </svg>
-                    <span>命令行</span>
-                    <span class="badge" id="formula-count-badge" style="display:none;">0</span>
-                </button>
-                <button class="nav-item" data-tab="outdated">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
-                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-                    </svg>
-                    <span>更新</span>
-                    <span class="badge" id="outdated-badge" style="display:none;">0</span>
+                    <span>已安装</span>
+                    <span class="badge" id="installed-count-badge" style="display:none;">0</span>
                 </button>
                 <button class="nav-item" data-tab="services">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -77,6 +64,13 @@
                     </svg>
                     <span>仓库</span>
                     <span class="badge" id="tap-count-badge" style="display:none;">0</span>
+                </button>
+                <button class="nav-item" data-tab="outdated">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+                    </svg>
+                    <span>更新</span>
+                    <span class="badge" id="outdated-badge" style="display:none;">0</span>
                 </button>
                 <div class="sidebar-divider"></div>
                 <button class="nav-item" data-tab="config">
@@ -111,7 +105,7 @@
                 </div>
 
                 <div class="stats-grid" id="stats-grid">
-                    <div class="stat-card stat-card-clickable" data-tab-target="installed-formula">
+                    <div class="stat-card stat-card-clickable" data-tab-target="installed" data-tab-type="formula">
                         <div class="stat-icon stat-icon-green">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
@@ -123,7 +117,7 @@
                             <div class="stat-sub" id="stat-formula-sub">Formula</div>
                         </div>
                     </div>
-                    <div class="stat-card stat-card-clickable" data-tab-target="installed-cask">
+                    <div class="stat-card stat-card-clickable" data-tab-target="installed" data-tab-type="cask">
                         <div class="stat-icon stat-icon-blue">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
@@ -255,14 +249,33 @@
             </div>
 
             <!-- Installed Cask -->
-            <div class="tab-content" id="tab-installed-cask">
+            <!-- Installed (Formula / Cask merged, sliding type switch) -->
+            <div class="tab-content" id="tab-installed">
                 <div class="page-heading">
                     <div class="page-heading-text">
-                        <h1>应用</h1>
-                        <p class="page-subtitle">已安装的图形应用（Cask）</p>
+                        <h1>已安装</h1>
+                        <p class="page-subtitle">管理已安装的软件包</p>
                     </div>
                     <div class="page-heading-actions">
-                        <button class="btn btn-secondary btn-refresh" id="installed-cask-refresh" onclick="refreshInstalled('cask')">
+                        <div class="type-switch" id="installed-type-switch" data-active="all">
+                            <span class="type-switch-thumb"></span>
+                            <button class="type-switch-btn active" data-type="all" onclick="setInstalledType('all')">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                全部
+                                <span class="type-switch-count" id="switch-all-count"></span>
+                            </button>
+                            <button class="type-switch-btn" data-type="formula" onclick="setInstalledType('formula')">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+                                命令行
+                                <span class="type-switch-count" id="switch-formula-count"></span>
+                            </button>
+                            <button class="type-switch-btn" data-type="cask" onclick="setInstalledType('cask')">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+                                应用
+                                <span class="type-switch-count" id="switch-cask-count"></span>
+                            </button>
+                        </div>
+                        <button class="btn btn-secondary btn-refresh" id="installed-refresh" onclick="refreshInstalled()">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
                                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
@@ -271,38 +284,17 @@
                         </button>
                     </div>
                 </div>
-                <input type="text" id="installed-cask-search" class="search-input list-search" placeholder="搜索已安装的应用…" oninput="filterInstalled('cask')">
-                <div id="cask-list" class="pkg-list">
-                    <div class="loading-state"><span class="spinner"></span> 加载中...</div>
+                <div class="installed-toolbar">
+                    <input type="text" id="installed-search" class="search-input list-search" placeholder="搜索已安装的软件包…" oninput="filterInstalled()">
+                    <label class="leaves-toggle" id="leaves-toggle-wrap" for="leaves-filter-checkbox" title="只显示顶层包（手动安装的，非依赖）" style="display:none;">
+                        <span class="leaves-toggle-label">顶层</span>
+                        <span class="switch switch-sm">
+                            <input type="checkbox" id="leaves-filter-checkbox" checked onchange="toggleLeavesFilter()">
+                            <span class="switch-track"><span class="switch-thumb"></span></span>
+                        </span>
+                    </label>
                 </div>
-            </div>
-
-            <!-- Installed Formula -->
-            <div class="tab-content" id="tab-installed-formula">
-                <div class="page-heading">
-                    <div class="page-heading-text">
-                        <h1>命令行</h1>
-                        <p class="page-subtitle">已安装的命令行（Formula）</p>
-                    </div>
-                    <div class="page-heading-actions">
-                        <button class="btn btn-secondary btn-refresh" id="installed-formula-refresh" onclick="refreshInstalled('formula')">
-                            <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                            </svg>
-                            <span>刷新</span>
-                        </button>
-                        <label class="leaves-toggle" title="只显示顶层包（手动安装的，非依赖）">
-                            <span class="leaves-toggle-label">顶层</span>
-                            <label class="switch switch-sm">
-                                <input type="checkbox" id="leaves-filter-checkbox" checked onchange="toggleLeavesFilter()">
-                                <span class="switch-track"><span class="switch-thumb"></span></span>
-                            </label>
-                        </label>
-                    </div>
-                </div>
-                <input type="text" id="installed-formula-search" class="search-input list-search" placeholder="搜索已安装的命令行…" oninput="filterInstalled('formula')">
-                <div id="formula-list" class="pkg-list">
+                <div id="installed-list" class="pkg-list">
                     <div class="loading-state"><span class="spinner"></span> 加载中...</div>
                 </div>
             </div>
