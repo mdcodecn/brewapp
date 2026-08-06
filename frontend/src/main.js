@@ -2065,33 +2065,10 @@ async function loadConfig() {
 async function loadSystemProxy() {
     try {
         const status = await Service.GetSystemProxy();
-        renderSystemProxy(status);
+        const cb = document.getElementById('system-proxy-toggle');
+        if (cb) cb.checked = !!(status && status.enabled);
     } catch (err) {
-        const el = document.getElementById('proxy-detect');
-        if (el) el.textContent = '获取系统代理信息失败';
-    }
-}
-
-function renderSystemProxy(status) {
-    const cb = document.getElementById('system-proxy-toggle');
-    if (cb) cb.checked = !!(status && status.enabled);
-    const el = document.getElementById('proxy-detect');
-    if (!el) return;
-    if (!status) {
-        el.textContent = '未检测到系统代理';
-        el.className = 'proxy-detect';
-        return;
-    }
-    const parts = [];
-    if (status.http) parts.push('HTTP ' + status.http);
-    if (status.https) parts.push('HTTPS ' + status.https);
-    if (status.socks) parts.push('SOCKS ' + status.socks);
-    if (parts.length === 0) {
-        el.textContent = '未检测到系统代理（可在 macOS 系统设置 → 网络 → 代理 中配置）';
-        el.className = 'proxy-detect';
-    } else {
-        el.textContent = '检测到：' + parts.join(' · ');
-        el.className = 'proxy-detect proxy-detect-ok';
+        // silent: toggle stays off on failure
     }
 }
 
@@ -2101,10 +2078,9 @@ window.toggleSystemProxy = async function() {
     const on = cb.checked;
     try {
         const status = await Service.SetSystemProxyEnabled(on);
-        renderSystemProxy(status);
         const hasProxy = status && (status.http || status.https || status.socks);
         if (on && !hasProxy) {
-            showToast('已开启，但未检测到系统代理，暂不会生效', 'info');
+            showToast('已开启（未检测到代理，暂不生效）', 'info');
         } else {
             showToast(on ? '已开启系统代理' : '已关闭系统代理', 'success');
         }

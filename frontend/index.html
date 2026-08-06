@@ -389,36 +389,23 @@
                     <h2 class="settings-heading">
                         <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
                         镜像源
-                        <span class="settings-heading-desc">点击卡片切换下载源</span>
-                        <button class="btn btn-secondary btn-sm mirror-speed-test-btn" id="mirror-speed-test-btn" onclick="testMirrorSpeeds()">
-                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                            测速
-                        </button>
+                        <span class="heading-actions">
+                            <label class="proxy-toggle-label" title="开启后应用内 brew 下载走系统代理">
+                                <span class="proxy-toggle-text">系统代理</span>
+                                <span class="switch switch-sm">
+                                    <input type="checkbox" id="system-proxy-toggle" onchange="toggleSystemProxy()">
+                                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                                </span>
+                            </label>
+                            <button class="btn btn-secondary btn-sm mirror-speed-test-btn" id="mirror-speed-test-btn" onclick="testMirrorSpeeds()">
+                                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                                测速
+                            </button>
+                        </span>
                     </h2>
-                    <p class="tap-hint" style="margin-bottom:14px;">切换后立即生效并写入 shell 配置文件，新开终端同样生效。下载异常可随时切回官方源。</p>
                     <div id="mirror-custom-note" class="mirror-custom-note" style="display:none;">当前使用的镜像源不在预设列表中，点击下方任一卡片即可切换。</div>
                     <div id="mirror-list" class="mirror-grid">
                         <div class="loading-state"><span class="spinner"></span> 加载中...</div>
-                    </div>
-                </div>
-
-                <!-- 系统代理 -->
-                <div class="settings-section">
-                    <h2 class="settings-heading">
-                        <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 12v9m-5-9v9m10-9v9"/><circle cx="12" cy="7" r="1.5"/></svg>
-                        系统代理
-                        <span class="settings-heading-desc">brew 下载走系统代理</span>
-                    </h2>
-                    <div class="proxy-row">
-                        <div class="proxy-info">
-                            <div class="proxy-title">使用系统代理</div>
-                            <div class="proxy-desc">开启后应用内 brew 下载走系统代理，可解决部分软件源直连超时。</div>
-                            <div class="proxy-detect" id="proxy-detect">检测中...</div>
-                        </div>
-                        <label class="switch" title="开启/关闭系统代理">
-                            <input type="checkbox" id="system-proxy-toggle" onchange="toggleSystemProxy()">
-                            <span class="switch-track"><span class="switch-thumb"></span></span>
-                        </label>
                     </div>
                 </div>
 
