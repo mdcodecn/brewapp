@@ -343,10 +343,20 @@ func (s *Service) GetPackageInfo(name, pkgType string) (BrewPackage, error) {
 	return pkg, nil
 }
 
-// Search searches for packages matching the query
-func (s *Service) Search(query string) ([]BrewSearchResult, error) {
+// SearchResponse wraps search results together with non-fatal warnings
+// (e.g. untrusted-tap refusals that make one category of results unavailable).
+type SearchResponse struct {
+	Results  []BrewSearchResult `json:"results"`
+	Warnings []string           `json:"warnings"`
+}
+
+// Search searches for packages matching the query.
+// Warnings are returned alongside results: a failed cask or formula search
+// (e.g. "Refusing to load ... from untrusted tap" on Homebrew 6+) does not
+// discard the other category's results.
+func (s *Service) Search(query string) (*SearchResponse, error) {
 	if query == "" {
-		return nil, nil
+		return &SearchResponse{}, nil
 	}
 
 	// First get installed package names for quick lookup
@@ -368,9 +378,17 @@ func (s *Service) Search(query string) ([]BrewSearchResult, error) {
 		installedSet[line] = true
 	}
 
-	// Search casks first, then formulas
-	caskResults, _ := s.searchCasks(query, installedSet)
-	formulaResults, _ := s.searchFormulae(query, installedSet)
+	// Search casks first, then formulas. Each category may fail on its own
+	// (e.g. untrusted tap), so collect warnings instead of dropping results.
+	var warnings []string
+	caskResults, err := s.searchCasks(query, installedSet)
+	if err != nil {
+		warnings = append(warnings, searchWarning("cask", err))
+	}
+	formulaResults, err := s.searchFormulae(query, installedSet)
+	if err != nil {
+		warnings = append(warnings, searchWarning("formula", err))
+	}
 
 	results := append(caskResults, formulaResults...)
 
@@ -379,7 +397,23 @@ func (s *Service) Search(query string) ([]BrewSearchResult, error) {
 		s.enrichSearchResults(results)
 	}
 
-	return results, nil
+	return &SearchResponse{Results: results, Warnings: warnings}, nil
+}
+
+// untrustedTapPattern extracts the tap name from Homebrew 6+ refusals such as
+// "Error: Refusing to load cask farion1231/ccswitch/cc-switch from untrusted
+// tap farion1231/ccswitch."
+var untrustedTapPattern = regexp.MustCompile(`from untrusted tap ([^\s.]+)`)
+
+// searchWarning converts a failed `brew search` into a user-facing warning.
+// Homebrew 6+ refuses to search untrusted third-party taps; that case gets an
+// actionable hint pointing at the in-app trust feature.
+func searchWarning(kind string, err error) string {
+	msg := err.Error()
+	if m := untrustedTapPattern.FindStringSubmatch(msg); len(m) > 1 {
+		return fmt.Sprintf("%s 搜索失败：tap「%s」未被信任，无法加载其中的包。请在「仓库」页信任该仓库，或运行 brew trust %s", kind, m[1], m[1])
+	}
+	return fmt.Sprintf("%s 搜索失败：%s", kind, msg)
 }
 
 // enrichSearchResults fills in version and description for search results using
@@ -700,6 +734,54 @@ func (s *Service) GetStats() (map[string]string, error) {
 	}
 
 	return result, nil
+}
+
+// TrustInfo describes which taps are trusted via `brew trust` (Homebrew 6+).
+// Supported is false on older Homebrew versions without the trust command.
+type TrustInfo struct {
+	Supported bool     `json:"supported"`
+	Taps      []string `json:"taps"`
+}
+
+// trustJSON mirrors `brew trust --json v1`
+type trustJSON struct {
+	Taps     []string `json:"taps"`
+	Formulae []string `json:"formulae"`
+	Casks    []string `json:"casks"`
+	Commands []string `json:"commands"`
+}
+
+// GetTrustInfo returns the taps currently trusted by `brew trust`.
+func (s *Service) GetTrustInfo() (*TrustInfo, error) {
+	info := &TrustInfo{Supported: false, Taps: []string{}}
+	output, err := s.runBrew("trust", "--json", "v1")
+	if err != nil {
+		// Homebrew < 6 has no trust command; every tap is loadable by default
+		return info, nil
+	}
+	info.Supported = true
+	var data trustJSON
+	if err := json.Unmarshal([]byte(output), &data); err != nil {
+		return nil, fmt.Errorf("failed to parse brew trust output: %w", err)
+	}
+	info.Taps = data.Taps
+	return info, nil
+}
+
+// TrustTap marks a tap as trusted so Homebrew 6+ will load its packages
+func (s *Service) TrustTap(tap string) error {
+	if _, err := s.runBrew("trust", "--tap", tap); err != nil {
+		return fmt.Errorf("failed to trust tap %s: %w", tap, err)
+	}
+	return nil
+}
+
+// UntrustTap revokes trust for a tap
+func (s *Service) UntrustTap(tap string) error {
+	if _, err := s.runBrew("untrust", "--tap", tap); err != nil {
+		return fmt.Errorf("failed to untrust tap %s: %w", tap, err)
+	}
+	return nil
 }
 
 // GetTaps returns all configured taps

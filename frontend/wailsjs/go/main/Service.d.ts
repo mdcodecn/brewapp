@@ -34,6 +34,8 @@ export function GetStats():Promise<Record<string, string>>;
 
 export function GetTaps():Promise<Array<string>>;
 
+export function GetTrustInfo():Promise<main.TrustInfo>;
+
 export function GetUses(arg1:string):Promise<Array<string>>;
 
 export function GetVersion():Promise<string>;
@@ -62,17 +64,21 @@ export function RestartService(arg1:string):Promise<void>;
 
 export function RunService(arg1:string):Promise<void>;
 
-export function Search(arg1:string):Promise<Array<main.BrewSearchResult>>;
+export function Search(arg1:string):Promise<main.SearchResponse>;
 
 export function StartService(arg1:string):Promise<void>;
 
 export function StopService(arg1:string):Promise<void>;
+
+export function TrustTap(arg1:string):Promise<void>;
 
 export function Uninstall(arg1:string,arg2:string):Promise<void>;
 
 export function Unlink(arg1:string):Promise<void>;
 
 export function Unpin(arg1:string):Promise<void>;
+
+export function UntrustTap(arg1:string):Promise<void>;
 
 export function Update():Promise<void>;
 

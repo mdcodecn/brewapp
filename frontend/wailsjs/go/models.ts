@@ -126,6 +126,52 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class SearchResponse {
+	    results: BrewSearchResult[];
+	    warnings: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new SearchResponse(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.results = this.convertValues(source["results"], BrewSearchResult);
+	        this.warnings = source["warnings"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class TrustInfo {
+	    supported: boolean;
+	    taps: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TrustInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.supported = source["supported"];
+	        this.taps = source["taps"];
+	    }
+	}
 
 }
 

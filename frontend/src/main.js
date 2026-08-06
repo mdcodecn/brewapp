@@ -215,7 +215,11 @@ let installedLoaded = false;
 // without waiting for the slower outdated check
 (async () => {
     try {
-        const taps = await Service.GetTaps();
+        const [taps, trust] = await Promise.all([
+            Service.GetTaps(),
+            Service.GetTrustInfo().catch(() => ({ supported: false, taps: [] })),
+        ]);
+        cachedTrustInfo = trust || { supported: false, taps: [] };
         tabCache.taps.data = taps;
         tabCache.taps.timestamp = Date.now();
         updateTapBadge(taps.length);
@@ -472,6 +476,7 @@ const FORMULA_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none
 const OUTDATED_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
 const CHECK_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
 const SEARCH_OFF_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="8" x2="14" y2="14"/><line x1="14" y1="8" x2="8" y2="14"/></svg>`;
+const SEARCH_WARN_ICON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
 const TAP_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
 
 // Nicer empty-state block with an icon, title and optional hint
@@ -827,13 +832,18 @@ async function uninstallPackage(name, type) {
 // ===== Search Page =====
 let searchTimeout = null;
 
-function renderSearchResults(results) {
+function renderSearchResults(results, warnings) {
     const container = document.getElementById('search-results');
     const countEl = document.getElementById('search-result-count');
     if (!container) return;
 
+    // Show non-fatal warnings (e.g. untrusted tap) above the results
+    const warnHTML = (warnings && warnings.length > 0)
+        ? warnings.map(w => `<div class="search-warning">${SEARCH_WARN_ICON}<span>${escapeHtml(w)}</span></div>`).join('')
+        : '';
+
     if (!results || results.length === 0) {
-        container.innerHTML = emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试，如 git、google-chrome');
+        container.innerHTML = warnHTML || emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试，如 git、google-chrome');
         if (countEl) countEl.style.display = 'none';
         return;
     }
@@ -845,7 +855,7 @@ function renderSearchResults(results) {
             : `${results.length} 个结果`;
     }
 
-    container.innerHTML = results.slice(0, 50).map(r => `
+    container.innerHTML = warnHTML + results.slice(0, 50).map(r => `
         <div class="result-item">
             <div class="result-icon result-icon-${r.type}">${r.type === 'cask' ? CASK_ICON : FORMULA_ICON}</div>
             <div class="result-main">
@@ -874,8 +884,8 @@ async function doSearch(query) {
     if (countEl) countEl.style.display = 'none';
 
     try {
-        const results = await Service.Search(query);
-        renderSearchResults(results);
+        const resp = await Service.Search(query);
+        renderSearchResults(resp.results, resp.warnings);
     } catch (err) {
         container.innerHTML = `<div class="empty-state">搜索失败: ${escapeHtml(err.message)}</div>`;
     }
@@ -1189,9 +1199,12 @@ async function autoremoveDeps() {
 }
 
 // ===== 仓库管理 =====
+// Trust info (Homebrew 6+ `brew trust`) cached alongside the tap list
+let cachedTrustInfo = { supported: false, taps: [] };
+
 async function loadTaps() {
     if (isCacheValid(tabCache.taps)) {
-        renderTaps(tabCache.taps.data);
+        renderTaps(tabCache.taps.data, cachedTrustInfo);
         loadTapsInBackground();
         return;
     }
@@ -1200,7 +1213,9 @@ async function loadTaps() {
         const taps = await Service.GetTaps();
         tabCache.taps.data = taps;
         tabCache.taps.timestamp = Date.now();
-        renderTaps(taps);
+        // Render immediately; trust status fills in asynchronously
+        renderTaps(taps, cachedTrustInfo);
+        loadTrustInfo();
     } catch (err) {
         document.getElementById('taps-list').innerHTML = `<p class="empty-state">加载失败: ${err.message}</p>`;
     }
@@ -1212,10 +1227,23 @@ async function loadTapsInBackground() {
         tabCache.taps.data = taps;
         tabCache.taps.timestamp = Date.now();
         if (currentTab === 'taps') {
-            renderTaps(taps);
+            renderTaps(taps, cachedTrustInfo);
         }
     } catch (err) {
         // Silently fail
+    }
+}
+
+// Fetch which taps are trusted by `brew trust` and re-render once available
+async function loadTrustInfo() {
+    try {
+        const trust = await Service.GetTrustInfo();
+        cachedTrustInfo = trust || { supported: false, taps: [] };
+        if (currentTab === 'taps') {
+            renderTaps(tabCache.taps.data || [], cachedTrustInfo);
+        }
+    } catch (err) {
+        cachedTrustInfo = { supported: false, taps: [] };
     }
 }
 
@@ -1230,27 +1258,65 @@ function updateTapBadge(count) {
     }
 }
 
-function renderTaps(taps) {
+function renderTaps(taps, trustInfo) {
     // Update sidebar badge
     updateTapBadge(taps.length);
 
     const pageCount = document.getElementById('tap-page-count');
     if (pageCount) pageCount.textContent = taps.length + ' 个';
 
+    const trustSupported = !!(trustInfo && trustInfo.supported);
+    const trustedSet = new Set((trustInfo && trustInfo.taps) || []);
+
     document.getElementById('taps-list').innerHTML = taps.length > 0
         ? taps.map(t => {
             const tapName = t.split(' ')[0];
             const rest = t.slice(tapName.length).trim();
+            const trusted = trustedSet.has(tapName);
+            // One stateful button carries both the state and the action:
+            // 「信任」(primary) while untrusted, 「已信任 ✓」(green) once trusted.
+            const trustBtn = trustSupported
+                ? `<button class="btn btn-sm ${trusted ? 'btn-success' : 'btn-primary'}" title="${trusted ? '已信任，点击取消信任' : '未信任，点击信任'}" onclick="toggleTapTrust('${escapeHtml(tapName)}', ${trusted ? 'false' : 'true'})">${trusted ? '✓ 已信任' : '信任'}</button>`
+                : '';
             return `<div class="tap-item">
                 <div class="tap-icon">${TAP_ICON}</div>
                 <div class="tap-main">
                     <span class="tap-name">${escapeHtml(tapName)}</span>
                     ${rest ? `<span class="tap-desc">${escapeHtml(rest)}</span>` : ''}
                 </div>
-                <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')">移除</button>
+                <div class="tap-actions">
+                    ${trustBtn}
+                    <button class="btn btn-danger btn-sm" onclick="removeTap('${escapeHtml(tapName)}')">移除</button>
+                </div>
             </div>`;
         }).join('')
         : emptyStateHTML(TAP_ICON, '暂无仓库', '在上方输入仓库名称添加，如 homebrew/cask');
+}
+
+// Toggle a tap's trust state with immediate effect; failures roll the
+// button state back and surface a toast.
+window.toggleTapTrust = toggleTapTrust;
+async function toggleTapTrust(tap, on) {
+    try {
+        if (on) {
+            await Service.TrustTap(tap);
+            showToast(`已信任 ${tap}，现在可以搜索其中的包了`, 'success');
+        } else {
+            await Service.UntrustTap(tap);
+            showToast(`已取消信任 ${tap}`, 'info');
+        }
+        const set = new Set(cachedTrustInfo.taps || []);
+        if (on) set.add(tap); else set.delete(tap);
+        cachedTrustInfo.taps = Array.from(set);
+        if (currentTab === 'taps') {
+            renderTaps(tabCache.taps.data || [], cachedTrustInfo);
+        }
+    } catch (err) {
+        showToast(`${on ? '信任失败' : '取消信任失败'}: ${err.message}`, 'error');
+        if (currentTab === 'taps') {
+            renderTaps(tabCache.taps.data || [], cachedTrustInfo); // roll back the button state
+        }
+    }
 }
 
 window.addTap = addTap;

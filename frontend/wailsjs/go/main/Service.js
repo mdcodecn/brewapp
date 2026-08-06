@@ -66,6 +66,10 @@ export function GetTaps() {
   return window['go']['main']['Service']['GetTaps']();
 }
 
+export function GetTrustInfo() {
+  return window['go']['main']['Service']['GetTrustInfo']();
+}
+
 export function GetUses(arg1) {
   return window['go']['main']['Service']['GetUses'](arg1);
 }
@@ -134,6 +138,10 @@ export function StopService(arg1) {
   return window['go']['main']['Service']['StopService'](arg1);
 }
 
+export function TrustTap(arg1) {
+  return window['go']['main']['Service']['TrustTap'](arg1);
+}
+
 export function Uninstall(arg1, arg2) {
   return window['go']['main']['Service']['Uninstall'](arg1, arg2);
 }
@@ -144,6 +152,10 @@ export function Unlink(arg1) {
 
 export function Unpin(arg1) {
   return window['go']['main']['Service']['Unpin'](arg1);
+}
+
+export function UntrustTap(arg1) {
+  return window['go']['main']['Service']['UntrustTap'](arg1);
 }
 
 export function Update() {
