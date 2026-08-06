@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/creack/pty"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -63,9 +63,21 @@ func NewService() *Service {
 	return &Service{}
 }
 
+// debugLog appends a timestamped line to /tmp/bm_debug.log (temporary
+// instrumentation for diagnosing the brew:progress event pipeline).
+func debugLog(format string, args ...interface{}) {
+	f, err := os.OpenFile("/tmp/bm_debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %s\n", time.Now().Format("15:04:05.000"), fmt.Sprintf(format, args...))
+}
+
 // setContext stores the application context (called on startup)
 func (s *Service) setContext(ctx context.Context) {
 	s.ctx = ctx
+	debugLog("setContext called, ctx=%v", ctx != nil)
 }
 
 // brewPathOnce / brewPath cache the resolved Homebrew location so we only pay
@@ -266,6 +278,7 @@ type brewProgressEvent struct {
 // emitBrewEvent pushes a progress event to the frontend. No-op when the
 // runtime context is not ready (e.g. during unit tests).
 func (s *Service) emitBrewEvent(op, kind, text string, ok bool, errMsg string) {
+	debugLog("emitBrewEvent op=%q kind=%q text=%.60q ctxNil=%v", op, kind, text, s.ctx == nil)
 	if s.ctx == nil {
 		return
 	}
@@ -274,10 +287,12 @@ func (s *Service) emitBrewEvent(op, kind, text string, ok bool, errMsg string) {
 	})
 }
 
-// ansiEscapeRe matches common ANSI escape sequences (colors, cursor moves).
-// brew disables color when piped, but stripping keeps the log clean if a tap
-// or environment forces escape codes through.
-var ansiEscapeRe = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07`)
+// ansiEscapeRe matches common ANSI escape sequences (colors, cursor moves,
+// charset/keypad selectors, OSC title). brew normally disables color when
+// piped, but under a pty (streamCommand below) it treats the output as a
+// terminal and emits colors and progress-bar control codes, so we must strip
+// them before showing the log.
+var ansiEscapeRe = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*(\x07|\x1b\\)|\x1b[()=><][A-Za-z0-9]`)
 
 // splitBrewOutput is a bufio.SplitFunc that breaks on \n and \r (homebrew
 // updates download progress bars with bare \r), keeping the delimiter so the
@@ -301,28 +316,32 @@ func splitBrewOutput(data []byte, atEOF bool) (advance int, token []byte, err er
 	return 0, nil, nil
 }
 
-// streamCommand runs `brew <args...>` and streams stdout+stderr line-by-line
-// to the frontend as "brew:progress" events tagged with op. It returns the
-// captured output (delimiter-trimmed) and the process error.
+// streamCommand runs `brew <args...>` under a pseudo-terminal (pty) and
+// streams its output line-by-line to the frontend as "brew:progress" events
+// tagged with op. It returns the captured output (delimiter-trimmed) and the
+// process error.
+//
+// A pty is used instead of plain pipes because Homebrew's Ruby runtime only
+// line-buffers stdout when it is attached to a terminal. When stdout is a
+// pipe, Ruby block-buffers it (4 KiB), so a long-running command such as
+// `brew upgrade` emits NOTHING until the buffer fills or the process exits —
+// the UI progress log would stay empty for minutes. Under a pty the output
+// arrives immediately, and brew's download progress bars (bare \r) work too.
 func (s *Service) streamCommand(op string, args ...string) (string, error) {
 	cmd := exec.Command(brewExecutable(), args...)
 
-	stdout, err := cmd.StdoutPipe()
+	// Run brew under a pty sized like a normal terminal. A fixed size is
+	// important: brew truncates section titles to the terminal width unless
+	// --verbose is passed (e.g. `brew install`), and a zero-sized pty would
+	// truncate them to nothing.
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Rows: 30, Cols: 120})
 	if err != nil {
-		return "", fmt.Errorf("create stdout pipe: %w", err)
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return "", fmt.Errorf("create stderr pipe: %w", err)
-	}
-	if err := cmd.Start(); err != nil {
-		return "", err
+		return "", fmt.Errorf("start command in pty: %w", err)
 	}
 
 	var (
 		mu  sync.Mutex
 		out strings.Builder
-		wg  sync.WaitGroup
 	)
 
 	emit := func(kind, text string) {
@@ -333,31 +352,29 @@ func (s *Service) streamCommand(op string, args ...string) (string, error) {
 		mu.Unlock()
 	}
 
-	scanPipe := func(r io.Reader) {
-		defer wg.Done()
-		sc := bufio.NewScanner(r)
-		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		sc.Split(splitBrewOutput)
-		for sc.Scan() {
-			raw := ansiEscapeRe.ReplaceAllString(sc.Text(), "")
-			var kind, text string
-			if strings.HasSuffix(raw, "\r") {
-				kind, text = brewEventRefresh, strings.TrimRight(raw, "\r")
-			} else {
-				kind, text = brewEventLine, strings.TrimRight(raw, "\r\n")
-			}
-			if text == "" {
-				continue
-			}
-			emit(kind, text)
+	// Read the merged stdout+stderr stream from the pty master. The master
+	// hits EOF once the child (and its pty slave) exits, so this loop ends
+	// naturally and Wait can then reap the process.
+	sc := bufio.NewScanner(ptmx)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	sc.Split(splitBrewOutput)
+	for sc.Scan() {
+		raw := ansiEscapeRe.ReplaceAllString(sc.Text(), "")
+		var kind, text string
+		if strings.HasSuffix(raw, "\r") {
+			// tty converts \n to \r\n; a lone \r (no following \n) is a
+			// progress-bar refresh that replaces the previous line
+			kind, text = brewEventRefresh, strings.TrimRight(raw, "\r")
+		} else {
+			kind, text = brewEventLine, strings.TrimRight(raw, "\r\n")
 		}
+		if text == "" {
+			continue
+		}
+		emit(kind, text)
 	}
 
-	wg.Add(2)
-	go scanPipe(stdout)
-	go scanPipe(stderr)
-	wg.Wait()
-
+	ptmx.Close()
 	if err := cmd.Wait(); err != nil {
 		return out.String(), err
 	}
@@ -367,6 +384,7 @@ func (s *Service) streamCommand(op string, args ...string) (string, error) {
 // runBrewStreaming runs a brew command under a frontend-streamed progress log.
 // It emits a start marker before and a done marker after the output.
 func (s *Service) runBrewStreaming(op string, args ...string) (string, error) {
+	debugLog("runBrewStreaming op=%q args=%v", op, args)
 	s.emitBrewEvent(op, brewEventStart, "brew "+strings.Join(args, " "), false, "")
 	output, err := s.streamCommand(op, args...)
 	s.emitBrewEvent(op, brewEventDone, "", err == nil, errString(err))
@@ -870,13 +888,18 @@ func (s *Service) Reinstall(name, pkgType string) error {
 	return nil
 }
 
-// Upgrade upgrades all packages or a specific one, streaming live progress
-func (s *Service) Upgrade(name ...string) error {
+// Upgrade upgrades all packages (names empty) or specific ones, streaming
+// live progress. It takes a plain slice (not variadic) because Wails v2's
+// binding layer mishandles variadic parameters: a call such as
+// Upgrade(["node"]) fails with "reflect: cannot use []string as type string"
+// and the method is never invoked.
+func (s *Service) Upgrade(names []string) error {
+	debugLog("Upgrade called names=%v", names)
 	args := []string{"upgrade", "--verbose"}
 	op := "upgrade:all"
-	if len(name) > 0 && name[0] != "" {
-		op = "upgrade:" + name[0]
-		args = append(args, name[0])
+	if len(names) > 0 && names[0] != "" {
+		op = "upgrade:" + names[0]
+		args = append(args, names[0])
 	}
 	_, err := s.runBrewStreaming(op, args...)
 	if err != nil {

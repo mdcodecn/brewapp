@@ -70,12 +70,25 @@ function showToast(message, type = 'info') {
 }
 
 // ===== Modal =====
+// modalOpId stamps every modal opening so a background operation that finishes
+// after its modal was dismissed can tell whether it is still the one on screen.
+let modalOpId = 0;
+
 function showModal(title, body, onConfirm, streamOp) {
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = body;
     document.getElementById('modal-overlay').style.display = 'flex';
+    const opId = ++modalOpId;
+    document.getElementById('modal-overlay').dataset.opId = String(opId);
     const confirmBtn = document.getElementById('modal-confirm');
     const newBtn = confirmBtn.cloneNode(true);
+    // cloneNode copies attributes from the previous run (data-done='1', the
+    // '执行中...' spinner, disabled), so always reset the button to a fresh
+    // confirm state — otherwise closing a running modal and opening another
+    // showModal-based feature would show a stuck '执行中...' button.
+    newBtn.removeAttribute('data-done');
+    newBtn.textContent = '确认';
+    newBtn.disabled = false;
     confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
     newBtn.addEventListener('click', async () => {
         // Guard against double-clicks while a long operation is running
@@ -90,13 +103,22 @@ function showModal(title, body, onConfirm, streamOp) {
             // Handled by the caller; keep the modal open until it finishes
         } finally {
             if (stream) detachBrewStream(stream);
-            closeModal();
+            // Only close if this modal is still the one on screen: the user
+            // may have dismissed it mid-run and opened another feature, and
+            // the finished background op must not close that newer modal.
+            if (document.getElementById('modal-overlay').dataset.opId === String(opId)) {
+                closeModal();
+            }
         }
     });
 }
 
 window.closeModal = closeModal;
 function closeModal() {
+    // Drop any active progress stream so events from a background operation
+    // that keeps running after the modal was dismissed are ignored instead
+    // of leaking into the next modal.
+    activeBrewStream = null;
     document.getElementById('modal-overlay').style.display = 'none';
     // Reset any size class applied by showModalLoading (e.g. 'modal-lg')
     const modalEl = document.getElementById('modal-overlay').querySelector('.modal');

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -30,6 +31,39 @@ func TestSplitBrewOutput(t *testing.T) {
 	for i := range want {
 		if tokens[i] != want[i] {
 			t.Errorf("token %d = %q, want %q", i, tokens[i], want[i])
+		}
+	}
+}
+
+// TestStreamCommandPty verifies streamCommand runs brew through a pty and
+// captures its output (regression test for the pty-based streaming).
+func TestStreamCommandPty(t *testing.T) {
+	if _, err := exec.LookPath("brew"); err != nil {
+		t.Skip("brew not installed")
+	}
+	s := &Service{}
+	out, err := s.streamCommand("test:version", "--version")
+	if err != nil {
+		t.Fatalf("streamCommand failed: %v", err)
+	}
+	if !strings.Contains(out, "Homebrew") {
+		t.Fatalf("expected Homebrew version output, got %q", out)
+	}
+}
+
+// TestAnsiEscapeRe verifies the pty output is cleaned of the ANSI escape
+// sequences brew emits when it detects a terminal.
+func TestAnsiEscapeRe(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"\x1b[32mhello\x1b[0m", "hello"},
+		{"\x1b[2K\rDownloading...", "\rDownloading..."},
+		{"\x1b[?25lfoo\x1b[?25h", "foo"},
+		{"\x1b]0;title\x07bar", "bar"},
+		{"\x1b(0abc\x1b(B", "abc"},
+	}
+	for _, c := range cases {
+		if got := ansiEscapeRe.ReplaceAllString(c.in, ""); got != c.want {
+			t.Errorf("ansi(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
