@@ -538,15 +538,15 @@ function updateInstalledCounts() {
     setStatValue(document.getElementById('stat-formulas'), formulaCount);
     setStatValue(document.getElementById('stat-casks'), casks.length);
 
-    // Sidebar badge: 已安装总数（全部包，保持稳定）
-    const total = casks.length + formulas.length;
+    // Sidebar badge: 已安装总数跟随顶层筛选（应用 + 顶层命令行）
+    const total = casks.length + formulaCount;
     const badge = document.getElementById('installed-count-badge');
     if (badge) {
         badge.style.display = total > 0 ? 'inline' : 'none';
         badge.textContent = total;
     }
 
-    // Type-switch counts: 全部=总数；命令行计数跟随顶层筛选，保证与列表一致
+    // Type-switch counts: 全部/命令行计数均跟随顶层筛选，保证与列表一致
     const ac = document.getElementById('switch-all-count');
     if (ac) ac.textContent = total > 0 ? String(total) : '';
     const fc = document.getElementById('switch-formula-count');
@@ -568,9 +568,9 @@ function setInstalledType(type) {
         b.classList.toggle('active', b.dataset.type === type);
     });
 
-    // 顶层筛选只在命令行视图下显示（全部/应用视图不受其影响）
+    // 顶层筛选在所有视图下都可见、始终生效
     const lw = document.getElementById('leaves-toggle-wrap');
-    if (lw) lw.style.display = type === 'formula' ? '' : 'none';
+    if (lw) lw.style.display = '';
 
     // Per-type search value + placeholder
     const input = document.getElementById('installed-search');
@@ -805,8 +805,8 @@ function renderInstalled(type, packages) {
     const filtered = packages.filter(p => {
         // 全部视图不做类型过滤，展示所有包
         if (type !== 'all' && p.type !== type) return false;
-        // 顶层筛选只在命令行视图生效；全部视图展示所有
-        if (type === 'formula' && leavesOnly && cachedLeaves && !cachedLeaves.includes(p.name)) return false;
+        // 顶层筛选始终生效（只作用于命令行，应用不受影响）
+        if (leavesOnly && p.type === 'formula' && cachedLeaves && !cachedLeaves.includes(p.name)) return false;
         if (!search) return true;
         return p.name.toLowerCase().includes(search) ||
                (p.description && p.description.toLowerCase().includes(search));
@@ -861,7 +861,7 @@ function renderInstalled(type, packages) {
             </div>
             <div class="pkg-actions">
                 <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
-                ${p.type === 'formula' ? `<button class="btn btn-secondary btn-sm${p.pinned ? ' btn-pinned' : ''}" onclick="togglePin('${escapeHtml(p.name)}', ${p.pinned})">${p.pinned ? '解锁' : '锁定'}</button><button class="btn btn-secondary btn-sm" onclick="linkPackage('${escapeHtml(p.name)}')" title="链接到 /usr/local">链接</button><button class="btn btn-secondary btn-sm" onclick="unlinkPackage('${escapeHtml(p.name)}')" title="取消链接">断开</button>` : ''}
+                ${p.type === 'formula' ? `<button class="btn btn-secondary btn-sm${p.pinned ? ' btn-pinned' : ''}" onclick="togglePin('${escapeHtml(p.name)}', ${p.pinned})">${p.pinned ? '解锁' : '锁定'}</button>` : ''}
                 <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${p.type}')">重装</button>
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${p.type}')">卸载</button>
             </div>
