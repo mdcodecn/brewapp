@@ -498,5 +498,18 @@
     </div>
 </div>
 <script type="module" src="./src/main.js"></script>
+
+<!-- Homebrew 缺失提示（全屏遮罩） -->
+<div class="modal-overlay" id="brew-missing-overlay" style="display:none;">
+    <div class="modal brew-missing-card">
+        <div class="brew-missing-icon">🍺</div>
+        <h2 style="margin:12px 0 8px; text-align:center;">未检测到 Homebrew</h2>
+        <p class="brew-missing-desc" id="brew-missing-desc" style="text-align:center; color:var(--text-secondary, #9a9aa5); line-height:1.6;"></p>
+        <div class="brew-missing-actions" style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+            <button class="btn btn-primary" onclick="window.openBrewSite()">前往安装 Homebrew</button>
+            <button class="btn btn-secondary" onclick="window.retryBrewCheck()">重新检测</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>

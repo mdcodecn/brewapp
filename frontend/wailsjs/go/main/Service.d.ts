@@ -14,6 +14,8 @@ export function Doctor():Promise<string>;
 
 export function ExportConfig():Promise<string>;
 
+export function GetBrewInfo():Promise<main.BrewInfo>;
+
 export function GetDependencies(arg1:string):Promise<Array<string>>;
 
 export function GetDiskUsage():Promise<Record<string, string>>;
@@ -61,6 +63,8 @@ export function Pin(arg1:string):Promise<void>;
 export function Reinstall(arg1:string,arg2:string):Promise<void>;
 
 export function RemoveTap(arg1:string):Promise<void>;
+
+export function ResetBrewDetection():Promise<void>;
 
 export function RestartService(arg1:string):Promise<void>;
 

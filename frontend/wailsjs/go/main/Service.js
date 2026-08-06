@@ -26,6 +26,10 @@ export function ExportConfig() {
   return window['go']['main']['Service']['ExportConfig']();
 }
 
+export function GetBrewInfo() {
+  return window['go']['main']['Service']['GetBrewInfo']();
+}
+
 export function GetDependencies(arg1) {
   return window['go']['main']['Service']['GetDependencies'](arg1);
 }
@@ -120,6 +124,10 @@ export function Reinstall(arg1, arg2) {
 
 export function RemoveTap(arg1) {
   return window['go']['main']['Service']['RemoveTap'](arg1);
+}
+
+export function ResetBrewDetection() {
+  return window['go']['main']['Service']['ResetBrewDetection']();
 }
 
 export function RestartService(arg1) {

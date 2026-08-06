@@ -2009,15 +2009,63 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== Init =====
+window.openBrewSite = () => {
+    Runtime.BrowserOpenURL('https://brew.sh/');
+};
+
+function showBrewMissing(info) {
+    const overlay = document.getElementById('brew-missing-overlay');
+    const desc = document.getElementById('brew-missing-desc');
+    if (!overlay) return;
+    if (info && info.error) {
+        desc.textContent = info.error;
+    } else {
+        desc.textContent = '未找到 Homebrew。请先安装 Homebrew 后点击"重新检测"。';
+    }
+    overlay.style.display = 'flex';
+}
+
+function hideBrewMissing() {
+    const overlay = document.getElementById('brew-missing-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+window.retryBrewCheck = async () => {
+    try {
+        await Service.ResetBrewDetection();
+        const info = await Service.GetBrewInfo();
+        if (info.available) {
+            hideBrewMissing();
+            const badge = document.getElementById('brew-version');
+            if (badge) badge.textContent = info.version || 'Brew';
+            refreshDashboard(true);
+        } else {
+            showBrewMissing(info);
+        }
+    } catch (err) {
+        showBrewMissing(null);
+    }
+};
+
 (async () => {
-    // GetVersion is non-critical, don't block the dashboard render
-    Service.GetVersion().then(version => {
-        document.getElementById('brew-version').textContent = version;
-    }).catch(() => {
-        document.getElementById('brew-version').textContent = 'Brew 未安装';
-    });
-    // Load dashboard immediately (first load, no cache)
-    refreshDashboard();
-
-
+    // Check Homebrew availability first so a missing brew shows one clear
+    // message instead of every tab failing with "加载失败".
+    try {
+        const info = await Service.GetBrewInfo();
+        if (info.available) {
+            const badge = document.getElementById('brew-version');
+            if (badge && info.version) badge.textContent = info.version;
+            refreshDashboard();
+        } else {
+            showBrewMissing(info);
+        }
+    } catch (err) {
+        // Fall back to the old behavior if the binding is missing
+        Service.GetVersion().then(version => {
+            document.getElementById('brew-version').textContent = version;
+        }).catch(() => {
+            document.getElementById('brew-version').textContent = 'Brew 未安装';
+        });
+        refreshDashboard();
+    }
 })();

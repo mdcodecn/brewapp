@@ -18,6 +18,10 @@ export function Doctor() {
   return window['go']['main']['App']['Doctor']();
 }
 
+export function GetBrewInfo() {
+  return window['go']['main']['App']['GetBrewInfo']();
+}
+
 export function GetDependencies(arg1) {
   return window['go']['main']['App']['GetDependencies'](arg1);
 }
@@ -56,6 +60,10 @@ export function Pin(arg1) {
 
 export function RemoveTap(arg1) {
   return window['go']['main']['App']['RemoveTap'](arg1);
+}
+
+export function ResetBrewDetection() {
+  return window['go']['main']['App']['ResetBrewDetection']();
 }
 
 export function SetMirrorSource(arg1) {

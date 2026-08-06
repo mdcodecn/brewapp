@@ -1,5 +1,23 @@
 export namespace main {
 	
+	export class BrewInfo {
+	    available: boolean;
+	    path?: string;
+	    version?: string;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new BrewInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.available = source["available"];
+	        this.path = source["path"];
+	        this.version = source["version"];
+	        this.error = source["error"];
+	    }
+	}
 	export class BrewPackage {
 	    name: string;
 	    version: string;

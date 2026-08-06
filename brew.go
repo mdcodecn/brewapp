@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -64,9 +66,174 @@ func (s *Service) setContext(ctx context.Context) {
 	s.ctx = ctx
 }
 
+// brewPathOnce / brewPath cache the resolved Homebrew location so we only pay
+// the discovery cost once. GUI apps launched from Finder/Dock inherit only
+// /usr/bin:/bin:/usr/sbin:/sbin, so "brew" is NOT resolvable through the
+// process PATH — we must find it in the user's actual environment.
+var (
+	brewPathOnce sync.Once
+	brewPath     string
+)
+
+// brewExecutable returns the absolute path to the brew binary, resolving it
+// on first use. Returns "brew" as a last resort so error messages stay
+// meaningful when Homebrew is genuinely not installed.
+func brewExecutable() string {
+	brewPathOnce.Do(func() {
+		brewPath = resolveBrewPath()
+	})
+	return brewPath
+}
+
+// resolveBrewPath discovers brew wherever the user installed it — default
+// prefixes, custom prefixes, nix/mise-style setups, or anything exported in
+// their shell profile. It never assumes a fixed install location.
+func resolveBrewPath() string {
+	// 1) Well-known prefixes: zero-cost fast path, no subprocess needed.
+	if p := brewFromKnownPrefixes(); p != "" {
+		return p
+	}
+
+	// 2) Ask the user's login shell. A login shell loads /etc/zprofile,
+	//    ~/.zprofile and runs path_helper, which reads /etc/paths.d — the
+	//    standard way Homebrew registers itself on macOS.
+	for _, shell := range userShellCandidates() {
+		if p := brewFromLoginShell(shell); p != "" {
+			return p
+		}
+	}
+
+	// 3) Some setups only export PATH in interactive rc files (~/.zshrc,
+	//    ~/.bashrc). Source those explicitly and re-query.
+	for _, shell := range userShellCandidates() {
+		if p := brewFromRCFiles(shell); p != "" {
+			return p
+		}
+	}
+
+	// 4) Terminal-launched fallback (PATH already contains brew).
+	if p, err := exec.LookPath("brew"); err == nil {
+		return p
+	}
+
+	return "brew"
+}
+
+// brewFromKnownPrefixes checks the standard install locations.
+func brewFromKnownPrefixes() string {
+	candidates := []string{
+		"/opt/homebrew/bin/brew",              // Apple Silicon
+		"/usr/local/bin/brew",                 // Intel
+		"/opt/local/bin/brew",                 // rare /opt/local installs
+		"/home/linuxbrew/.linuxbrew/bin/brew", // Linuxbrew
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(home, ".homebrew/bin/brew"),
+			filepath.Join(home, ".linuxbrew/bin/brew"),
+			filepath.Join(home, "homebrew/bin/brew"),
+		)
+	}
+	for _, p := range candidates {
+		if isExecutableFile(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+// userShellCandidates returns the shells to probe, user's default first.
+func userShellCandidates() []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, 4)
+	add := func(s string) {
+		if s == "" || seen[s] {
+			return
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	add(os.Getenv("SHELL"))
+	add("/bin/zsh")
+	add("/bin/bash")
+	add("/bin/sh")
+	return out
+}
+
+// brewFromLoginShell evaluates `command -v brew` in a login shell, covering
+// ~/.zprofile, /etc/zprofile, path_helper and /etc/paths.d entries.
+func brewFromLoginShell(shell string) string {
+	return runShellQuery(shell, "-l", "-c", "command -v brew")
+}
+
+// brewFromRCFiles sources the common rc/profile files directly, covering
+// setups that only export PATH in interactive rc files (~/.zshrc, ~/.bashrc).
+func brewFromRCFiles(shell string) string {
+	const script = "source ~/.zshenv 2>/dev/null; source ~/.zprofile 2>/dev/null; " +
+		"source ~/.profile 2>/dev/null; source ~/.bash_profile 2>/dev/null; " +
+		"source ~/.bashrc 2>/dev/null; source ~/.zshrc 2>/dev/null; " +
+		"command -v brew"
+	return runShellQuery(shell, "-c", script)
+}
+
+// runShellQuery runs `command -v brew` in the given shell with a timeout and
+// returns the resolved absolute path, or "" when not found. The timeout keeps
+// slow shells (oh-my-zsh, nvm, …) from blocking startup.
+func runShellQuery(shell string, args ...string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, shell, args...)
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	p := strings.TrimSpace(string(out))
+	if p == "" || strings.ContainsAny(p, " \t\n") || !isExecutableFile(p) {
+		return ""
+	}
+	return p
+}
+
+// isExecutableFile reports whether p exists and is executable.
+func isExecutableFile(p string) bool {
+	info, err := os.Stat(p)
+	if err != nil || info.IsDir() {
+		return false
+	}
+	return info.Mode()&0o111 != 0
+}
+
+// ResetBrewDetection clears the cached location so the next brew call
+// re-discovers it (used by the UI's "重新检测" button after installing brew).
+func (s *Service) ResetBrewDetection() {
+	brewPathOnce = sync.Once{}
+	brewPath = ""
+}
+
+// BrewInfo reports Homebrew availability and location to the UI.
+type BrewInfo struct {
+	Available bool   `json:"available"`
+	Path      string `json:"path,omitempty"`
+	Version   string `json:"version,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+// GetBrewInfo returns whether Homebrew was found and where.
+func (s *Service) GetBrewInfo() *BrewInfo {
+	info := &BrewInfo{}
+	if isExecutableFile(brewExecutable()) {
+		info.Available = true
+		info.Path = brewExecutable()
+		info.Version = s.GetVersion()
+	} else {
+		info.Error = "未找到 Homebrew。请先安装：https://brew.sh"
+	}
+	return info
+}
+
 // runBrew executes a brew command and returns the output
 func (s *Service) runBrew(args ...string) (string, error) {
-	cmd := exec.Command("brew", args...)
+	cmd := exec.Command(brewExecutable(), args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("brew %s: %s (%w)", strings.Join(args, " "), string(output), err)

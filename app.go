@@ -30,6 +30,16 @@ func (a *App) Version() string {
 	return a.brewService.GetVersion()
 }
 
+// GetBrewInfo returns Homebrew availability info (found or not, and where)
+func (a *App) GetBrewInfo() *BrewInfo {
+	return a.brewService.GetBrewInfo()
+}
+
+// ResetBrewDetection re-discovers the brew installation on next use
+func (a *App) ResetBrewDetection() {
+	a.brewService.ResetBrewDetection()
+}
+
 // GetDependencies returns dependencies for a package
 func (a *App) GetDependencies(name string) ([]string, error) {
 	return a.brewService.GetDependencies(name)

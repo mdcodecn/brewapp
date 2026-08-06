@@ -10,6 +10,8 @@ export function Config():Promise<string>;
 
 export function Doctor():Promise<string>;
 
+export function GetBrewInfo():Promise<main.BrewInfo>;
+
 export function GetDependencies(arg1:string):Promise<Array<string>>;
 
 export function GetLeaves():Promise<Array<string>>;
@@ -29,6 +31,8 @@ export function Link(arg1:string):Promise<void>;
 export function Pin(arg1:string):Promise<void>;
 
 export function RemoveTap(arg1:string):Promise<void>;
+
+export function ResetBrewDetection():Promise<void>;
 
 export function SetMirrorSource(arg1:string):Promise<void>;
 
