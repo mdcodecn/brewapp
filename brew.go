@@ -372,7 +372,60 @@ func (s *Service) Search(query string) ([]BrewSearchResult, error) {
 	caskResults, _ := s.searchCasks(query, installedSet)
 	formulaResults, _ := s.searchFormulae(query, installedSet)
 
-	return append(caskResults, formulaResults...), nil
+	results := append(caskResults, formulaResults...)
+
+	// Enrich with descriptions and versions via batch brew info calls
+	if len(results) > 0 && len(results) <= 60 {
+		s.enrichSearchResults(results)
+	}
+
+	return results, nil
+}
+
+// enrichSearchResults fills in version and description for search results using
+// batch `brew info --json=v2` calls (up to 30 names per invocation).
+func (s *Service) enrichSearchResults(results []BrewSearchResult) {
+	names := make([]string, 0, len(results))
+	for _, r := range results {
+		names = append(names, r.Name)
+	}
+
+	batchSize := 30
+	type info struct {
+		version string
+		desc    string
+	}
+	nameToInfo := make(map[string]info, len(names))
+
+	for i := 0; i < len(names); i += batchSize {
+		end := i + batchSize
+		if end > len(names) {
+			end = len(names)
+		}
+		batch := names[i:end]
+		args := append([]string{"info", "--json=v2"}, batch...)
+		output, err := s.runBrew(args...)
+		if err != nil {
+			continue
+		}
+		var data infoV2JSON
+		if err := json.Unmarshal([]byte(output), &data); err != nil {
+			continue
+		}
+		for _, f := range data.Formulae {
+			nameToInfo[f.Name] = info{version: f.Versions.Stable, desc: f.Desc}
+		}
+		for _, c := range data.Casks {
+			nameToInfo[c.Token] = info{version: c.Version, desc: c.Desc}
+		}
+	}
+
+	for i := range results {
+		if inf, ok := nameToInfo[results[i].Name]; ok {
+			results[i].Version = inf.version
+			results[i].Description = inf.desc
+		}
+	}
 }
 
 // searchFormulae searches for formulae matching the query

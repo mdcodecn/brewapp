@@ -947,6 +947,14 @@ body {
   flex: 1;
 }
 
+.outdated-more {
+  text-align: center;
+  padding: 8px 0 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
 /* ===== Quick Actions ===== */
 .quick-actions {
   display: grid;
@@ -2216,6 +2224,22 @@ body {
 
 .switch-sm input:checked ~ .switch-track .switch-thumb {
   transform: translateX(14px);
+}
+
+/* Leaves toggle in formula page heading */
+.leaves-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.leaves-toggle-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 
 /* ===== Scrollbar ===== */

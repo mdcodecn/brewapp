@@ -134,7 +134,20 @@ function renderDetailModal(info) {
             <div class="detail-section-header"><span>被依赖</span><span class="count-badge" id="uses-count">…</span></div>
             <div class="detail-deps-list" id="detail-uses"><span class="rel-loading">加载中...</span></div>
         </div>
+        <div class="detail-section" id="detail-install-time-section">
+            <div class="detail-section-header"><span>安装时间</span></div>
+            <span id="detail-install-time" class="rel-loading">加载中...</span>
+        </div>
     `;
+
+    // Load install time
+    Service.GetPackageInstallTime(info.name).then(t => {
+        const el = document.getElementById('detail-install-time');
+        if (el) { el.className = ''; el.textContent = t || '未知'; }
+    }).catch(() => {
+        const el = document.getElementById('detail-install-time');
+        if (el) { el.className = ''; el.textContent = '未知'; }
+    });
 
     // Load dependencies and dependents in parallel; each fills its own column
     Service.GetDependencies(info.name).then(deps => {
@@ -470,43 +483,96 @@ function emptyStateHTML(icon, title, sub) {
     </div>`;
 }
 
+let leavesOnly = true;
+let cachedLeaves = null;
+
+// Pre-fetch leaves on startup so dashboard/formula counts are correct immediately
+(async () => {
+    try {
+        cachedLeaves = await Service.GetLeaves();
+        if (installedPackages.length > 0) {
+            updateFormulaStat();
+        }
+    } catch (err) {
+        console.warn('预加载顶层包列表失败:', err);
+    }
+})();
+
+window.toggleLeavesFilter = toggleLeavesFilter;
+function toggleLeavesFilter() {
+    const cb = document.getElementById('leaves-filter-checkbox');
+    leavesOnly = cb ? cb.checked : !leavesOnly;
+    if (leavesOnly && !cachedLeaves) {
+        Service.GetLeaves().then(list => {
+            cachedLeaves = list;
+            renderInstalled('formula', installedPackages);
+            updateFormulaStat();
+        }).catch(err => {
+            showToast('获取顶层包列表失败: ' + err.message, 'error');
+            leavesOnly = false;
+            if (cb) cb.checked = false;
+        });
+        return;
+    }
+    renderInstalled('formula', installedPackages);
+    updateFormulaStat();
+    // Also refresh outdated/dashboard if on those tabs
+    if (currentTab === 'outdated' && tabCache.outdated.data) {
+        renderOutdated(tabCache.outdated.data);
+    }
+    if (currentTab === 'dashboard') {
+        refreshDashboard();
+    }
+}
+
+function updateFormulaStat() {
+    const formulas = installedPackages.filter(p => p.type === 'formula');
+    const count = leavesOnly && cachedLeaves
+        ? formulas.filter(f => cachedLeaves.includes(f.name)).length
+        : formulas.length;
+    setStatValue(document.getElementById('stat-formulas'), count);
+    const badge = document.getElementById('formula-count-badge');
+    if (badge) {
+        badge.style.display = count > 0 ? 'inline' : 'none';
+        badge.textContent = count;
+    }
+}
+
+function outdatedTopLevelCount(outdated) {
+    if (!leavesOnly || !cachedLeaves) return outdated.length;
+    return outdated.filter(p => p.type !== 'formula' || cachedLeaves.includes(p.name)).length;
+}
+
 function renderDashboard(data) {
     const { packages, outdated } = data;
 
-    const formulas = packages.filter(p => p.type === 'formula');
     const casks = packages.filter(p => p.type === 'cask');
 
-    // Stats cards
-    setStatValue(document.getElementById('stat-formulas'), formulas.length);
+    // Stats cards — formula stat respects leaves filter
+    updateFormulaStat();
     setStatValue(document.getElementById('stat-casks'), casks.length);
     setStatValue(document.getElementById('stat-taps'), (data.taps || []).length);
 
     // Disk stat: total Homebrew directory usage (Cellar + Caskroom + Cache)
     updateDiskStat();
 
-    // Outdated badge (sidebar)
+    // Outdated badge (sidebar) — respects leaves filter
+    const outdatedCount = outdatedTopLevelCount(outdated);
     const badge = document.getElementById('outdated-badge');
-    if (outdated.length > 0) {
+    if (outdatedCount > 0) {
         badge.style.display = 'inline';
-        badge.textContent = outdated.length;
+        badge.textContent = outdatedCount;
     } else {
         badge.style.display = 'none';
     }
 
-    // Sidebar badges for cask and formula counts
+    // Sidebar badges for cask (formula badge is handled by updateFormulaStat)
     const caskBadge = document.getElementById('cask-count-badge');
-    const formulaBadge = document.getElementById('formula-count-badge');
     if (casks.length > 0) {
         caskBadge.style.display = 'inline';
         caskBadge.textContent = casks.length;
     } else {
         caskBadge.style.display = 'none';
-    }
-    if (formulas.length > 0) {
-        formulaBadge.style.display = 'inline';
-        formulaBadge.textContent = formulas.length;
-    } else {
-        formulaBadge.style.display = 'none';
     }
 
     // Sidebar badge for repository (tap) count
@@ -536,7 +602,12 @@ function renderOutdatedPreview(outdated, loaded) {
 
     if (countEl) countEl.textContent = outdated.length;
 
-    if (outdated.length === 0) {
+    // Apply leaves filter to the preview as well
+    const visible = leavesOnly && cachedLeaves
+        ? outdated.filter(p => p.type !== 'formula' || cachedLeaves.includes(p.name))
+        : outdated;
+
+    if (visible.length === 0) {
         container.innerHTML = `
             <div class="outdated-empty">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
@@ -545,7 +616,8 @@ function renderOutdatedPreview(outdated, loaded) {
         return;
     }
 
-    const top = outdated.slice(0, 5);
+    const top = visible.slice(0, 5);
+    const remainder = visible.length - 5;
     container.innerHTML = top.map(p => {
         const icon = p.type === 'cask' ? CASK_ICON : FORMULA_ICON;
         const iconCls = p.type === 'cask' ? 'pkg-icon-cask' : 'pkg-icon-formula';
@@ -557,7 +629,8 @@ function renderOutdatedPreview(outdated, loaded) {
             ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="outdated-version outdated-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
             <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
         </div>`;
-    }).join('');
+    }).join('')
+    + (remainder > 0 ? `<div class="outdated-more">还有 ${remainder} 个</div>` : '');
 }
 
 // ===== Installed =====
@@ -636,6 +709,7 @@ function renderInstalled(type, packages) {
     const search = document.getElementById(searchInputId).value.toLowerCase();
     const filtered = packages.filter(p => {
         if (p.type !== type) return false;
+        if (leavesOnly && type === 'formula' && cachedLeaves && !cachedLeaves.includes(p.name)) return false;
         if (!search) return true;
         return p.name.toLowerCase().includes(search) ||
                (p.description && p.description.toLowerCase().includes(search));
@@ -689,7 +763,7 @@ function renderInstalled(type, packages) {
             </div>
             <div class="pkg-actions">
                 <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
-                ${type === 'formula' ? `<button class="btn btn-secondary btn-sm${p.pinned ? ' btn-pinned' : ''}" onclick="togglePin('${escapeHtml(p.name)}', ${p.pinned})">${p.pinned ? '解锁' : '锁定'}</button>` : ''}
+                ${type === 'formula' ? `<button class="btn btn-secondary btn-sm${p.pinned ? ' btn-pinned' : ''}" onclick="togglePin('${escapeHtml(p.name)}', ${p.pinned})">${p.pinned ? '解锁' : '锁定'}</button><button class="btn btn-secondary btn-sm" onclick="linkPackage('${escapeHtml(p.name)}')" title="链接到 /usr/local">链接</button><button class="btn btn-secondary btn-sm" onclick="unlinkPackage('${escapeHtml(p.name)}')" title="取消链接">断开</button>` : ''}
                 <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${type}')">重装</button>
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${type}')">卸载</button>
             </div>
@@ -892,6 +966,7 @@ function renderOutdated(outdated) {
     const container = document.getElementById('outdated-list');
     const search = (document.getElementById('outdated-search')?.value || '').toLowerCase();
     const filtered = outdated.filter(p => {
+        if (leavesOnly && cachedLeaves && p.type === 'formula' && !cachedLeaves.includes(p.name)) return false;
         if (!search) return true;
         return p.name.toLowerCase().includes(search) ||
                (p.description && p.description.toLowerCase().includes(search));
@@ -925,6 +1000,7 @@ function renderOutdated(outdated) {
                 ${p.description ? `<span class="pkg-desc">${escapeHtml(p.description)}</span>` : ''}
             </div>
             <div class="pkg-actions">
+                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
                 <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
             </div>
         </div>`;
@@ -1342,6 +1418,9 @@ function renderServices(services) {
                 ${sv.user ? `<span class="service-user">用户：${escapeHtml(sv.user)}</span>` : ''}
             </div>
             <div class="pkg-actions">
+                <button class="btn btn-secondary btn-sm" onclick="restartService('${escapeHtml(sv.name)}')" title="重启">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                </button>
                 <label class="switch">
                     <input type="checkbox" data-service="${escapeHtml(sv.name)}" ${running ? 'checked' : ''} onchange="toggleService(this)">
                     <span class="switch-track"><span class="switch-thumb"></span></span>
@@ -1349,6 +1428,24 @@ function renderServices(services) {
             </div>
         </div>`;
     }).join('');
+}
+
+window.restartService = restartService;
+async function restartService(name) {
+    if (servicesBusy) return;
+    servicesBusy = true;
+    const switches = document.querySelectorAll('.switch input');
+    switches.forEach(i => { i.disabled = true; });
+    showToast(`正在重启 ${name}...`, 'info');
+    try {
+        await Service.RestartService(name);
+        showToast(`服务 ${name} 已重启`, 'success');
+        reloadServices();
+    } catch (err) {
+        switches.forEach(i => { i.disabled = false; });
+        showToast(`重启失败: ${err.message}`, 'error');
+    }
+    servicesBusy = false;
 }
 
 // After a service action, invalidate caches and reload the list
@@ -1637,6 +1734,39 @@ async function loadConfig() {
             document.getElementById('config-output').textContent = '加载配置失败: ' + err.message;
         }
     }
+
+    // Disk usage
+    renderConfigDiskUsage();
+}
+
+function renderConfigDiskUsage() {
+    const grid = document.getElementById('config-disk-usage');
+    const totalEl = document.getElementById('config-disk-total');
+    if (!grid) return;
+
+    const disk = cachedDiskUsage;
+    if (!disk || Object.keys(disk).length === 0) {
+        grid.innerHTML = '<div class="disk-empty">暂无磁盘数据</div>';
+        if (totalEl) totalEl.textContent = '-';
+        return;
+    }
+
+    const entries = Object.entries(disk);
+    const total = entries.reduce((sum, [, v]) => sum + parseSize(v), 0);
+    if (totalEl) totalEl.textContent = formatBytes(total);
+
+    const CELLAR_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>';
+    const CASK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>';
+    const CACHE_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+
+    grid.innerHTML = entries.map(([label, size]) => {
+        const bytes = parseSize(size);
+        const pct = total > 0 ? Math.round((bytes / total) * 100) : 0;
+        const barCls = label.includes('Cellar') ? 'disk-bar-box' : label.includes('Caskroom') ? 'disk-bar-app' : 'disk-bar-trash';
+        const iconCls = label.includes('Cellar') ? 'disk-icon-box' : label.includes('Caskroom') ? 'disk-icon-app' : 'disk-icon-trash';
+        const iconSvg = label.includes('Cellar') ? CELLAR_SVG : label.includes('Caskroom') ? CASK_SVG : CACHE_SVG;
+        return `<div class="disk-usage-item"><div class="disk-icon ${iconCls}">${iconSvg}</div><div class="disk-info"><div class="disk-line"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(size)}</span></div><div class="disk-bar"><div class="disk-bar-fill ${barCls}" style="width:${pct}%"></div></div></div></div>`;
+    }).join('');
 }
 
 // ===== Quick action: run the vulnerability scan in a modal (no tab switch) =====
@@ -1693,6 +1823,28 @@ async function unpinPackage(name) {
         showToast(`${name} 已解锁`, 'success');
     } catch (err) {
         showToast('解锁失败: ' + err.message, 'error');
+    }
+}
+
+window.linkPackage = linkPackage;
+async function linkPackage(name) {
+    showToast(`${name} 正在链接...`, 'info');
+    try {
+        await Service.Link(name);
+        showToast(`${name} 已链接`, 'success');
+    } catch (err) {
+        showToast(`链接失败: ${err.message}`, 'error');
+    }
+}
+
+window.unlinkPackage = unlinkPackage;
+async function unlinkPackage(name) {
+    showToast(`${name} 正在断开链接...`, 'info');
+    try {
+        await Service.Unlink(name);
+        showToast(`${name} 已断开链接`, 'success');
+    } catch (err) {
+        showToast(`断开链接失败: ${err.message}`, 'error');
     }
 }
 

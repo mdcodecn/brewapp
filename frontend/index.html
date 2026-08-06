@@ -149,7 +149,7 @@
                         </div>
                         <svg class="stat-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
                     </div>
-                    <div class="stat-card">
+                    <div class="stat-card stat-card-clickable" data-tab-target="config">
                         <div class="stat-icon stat-icon-orange">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -295,6 +295,13 @@
                             </svg>
                             <span>刷新</span>
                         </button>
+                        <label class="leaves-toggle" title="只显示顶层包（手动安装的，非依赖）">
+                            <span class="leaves-toggle-label">顶层</span>
+                            <label class="switch switch-sm">
+                                <input type="checkbox" id="leaves-filter-checkbox" checked onchange="toggleLeavesFilter()">
+                                <span class="switch-track"><span class="switch-thumb"></span></span>
+                            </label>
+                        </label>
                     </div>
                 </div>
                 <input type="text" id="installed-formula-search" class="search-input list-search" placeholder="搜索已安装的命令行…" oninput="filterInstalled('formula')">
@@ -395,6 +402,16 @@
                                 <span class="settings-heading-desc">brew config 输出</span>
                             </h2>
                             <pre id="config-output" class="output-pre">加载中...</pre>
+                        </div>
+
+                        <!-- Disk Usage -->
+                        <div class="settings-section">
+                            <h2 class="settings-heading">
+                                <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                                磁盘占用
+                                <span class="disk-total" id="config-disk-total">-</span>
+                            </h2>
+                            <div id="config-disk-usage" class="disk-usage-grid"></div>
                         </div>
                     </div>
 
