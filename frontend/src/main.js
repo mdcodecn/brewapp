@@ -136,9 +136,15 @@ function showDetailModal(pkg) {
     body.innerHTML = '<div class="loading-state"><span class="spinner"></span> 加载详情...</div>';
     document.getElementById('detail-modal-overlay').style.display = 'flex';
 
-    // Load full package info
-    Service.GetPackageInfo(pkg.name, pkg.type).then(info => {
+    // Everything but 被依赖 comes from ONE `brew info --json=v2` on the Go side
+    // (info + install time + dependencies); uses needs its own `brew uses` call.
+    Service.GetPackageDetail(pkg.name, pkg.type).then(info => {
         renderDetailModal(info);
+        Service.GetUses(info.name).then(uses => {
+            renderRelationList('uses-count', 'detail-uses', uses, '暂无被依赖信息');
+        }).catch(() => {
+            renderRelationList('uses-count', 'detail-uses', null, '获取失败');
+        });
     }).catch(err => {
         body.innerHTML = `<p class="empty-state">加载详情失败: ${err.message}</p>`;
     });
@@ -174,27 +180,10 @@ function renderDetailModal(info) {
         </div>
     `;
 
-    // Load install time
-    Service.GetPackageInstallTime(info.name).then(t => {
-        const el = document.getElementById('detail-install-time');
-        if (el) { el.className = ''; el.textContent = t || '未知'; }
-    }).catch(() => {
-        const el = document.getElementById('detail-install-time');
-        if (el) { el.className = ''; el.textContent = '未知'; }
-    });
-
-    // Load dependencies and dependents in parallel; each fills its own column
-    Service.GetDependencies(info.name).then(deps => {
-        renderRelationList('deps-count', 'detail-deps', deps, '暂无依赖');
-    }).catch(() => {
-        renderRelationList('deps-count', 'detail-deps', null, '获取失败');
-    });
-
-    Service.GetUses(info.name).then(uses => {
-        renderRelationList('uses-count', 'detail-uses', uses, '暂无被依赖信息');
-    }).catch(() => {
-        renderRelationList('uses-count', 'detail-uses', null, '获取失败');
-    });
+    // Install time and dependencies come pre-loaded from the single info call
+    const tEl = document.getElementById('detail-install-time');
+    if (tEl) { tEl.className = ''; tEl.textContent = info.install_time || '未知'; }
+    renderRelationList('deps-count', 'detail-deps', info.depends_on || [], '暂无依赖');
 }
 
 // renderRelationList fills one relation section (依赖 / 被依赖) with tags.
@@ -1789,7 +1778,10 @@ function escapeHtml(str) {
     if (!str) return '';
     const div = document.createElement('div');
     div.textContent = str;
-    return div.innerHTML;
+    // innerHTML never escapes single quotes or backslashes; escape them too so
+    // the result is also safe inside single-quoted JS strings in onclick="..."
+    // attributes (e.g. upgradePackage('name-with-quote')).
+    return div.innerHTML.replace(/'/g, '&#39;').replace(/\\/g, '&#92;');
 }
 
 // Serialize an object for use inside an onclick="..." attribute safely.
@@ -1903,7 +1895,7 @@ function attachBrewStream(op, host) {
     pane.innerHTML = '';
     const pre = document.createElement('pre');
     pane.appendChild(pre);
-    const st = { op, log: pane, pre, lineCount: 0 };
+    const st = { op, log: pane, pre, lineCount: 0, pendingLines: [], pendingRefresh: null, flushScheduled: false };
     activeBrewStream = st;
     return st;
 }
@@ -1916,38 +1908,66 @@ function handleBrewProgress(st, e) {
     if (e.kind === 'done' || !e.text) return; // final result handled by the caller
     st.log.hidden = false;
     if (e.kind === 'refresh') {
-        replaceLastLogLine(st, e.text);
+        // progress-bar update: replaces the previous rendered line
+        st.pendingRefresh = e.text;
+        flushLog(st);
         return;
     }
     const kind = e.kind === 'phase' ? 'phase' : e.kind === 'start' ? 'cmd' : null;
-    appendLogLine(st, e.text, kind);
+    st.pendingLines.push({ text: e.text, kind });
+    scheduleLogFlush(st);
 }
 
-function appendLogLine(st, text, kind) {
-    // Cap total lines: drop the oldest to keep the DOM light for long runs
-    if (st.lineCount >= 4000) {
-        const first = st.pre.firstElementChild;
-        if (first) { first.remove(); st.lineCount--; }
-    }
-    const div = document.createElement('div');
-    div.textContent = text;
-    if (kind === 'cmd') div.className = 'log-cmd';
-    else if (kind === 'phase') div.className = 'log-phase';
-    else if (/^(error|fatal)/i.test(text)) div.className = 'log-err';
-    else if (/^warning:/i.test(text)) div.className = 'log-warn';
-    st.pre.appendChild(div);
-    st.lineCount++;
-    st.pre.scrollTop = st.pre.scrollHeight;
+function scheduleLogFlush(st) {
+    if (st.flushScheduled) return;
+    st.flushScheduled = true;
+    requestAnimationFrame(() => flushLog(st));
 }
 
-function replaceLastLogLine(st, text) {
-    const last = st.pre.lastElementChild;
-    if (last && last.className !== 'log-cmd' && last.className !== 'log-phase') {
-        last.textContent = text;
-        st.pre.scrollTop = st.pre.scrollHeight;
-        return;
+// flushLog appends all queued lines in ONE DOM pass (DocumentFragment) and
+// scrolls once per frame, instead of creating/appending a node and forcing a
+// synchronous scroll layout per line — the previous code thrashed the layout
+// on long installs (thousands of lines).
+function flushLog(st) {
+    st.flushScheduled = false;
+    const frag = document.createDocumentFragment();
+    let changed = false;
+
+    // A pending refresh line replaces the last visible line (unless the last
+    // element is a cmd/phase header, in which case it behaves like a line).
+    if (st.pendingRefresh != null) {
+        const last = st.pre.lastElementChild;
+        if (last && last.className !== 'log-cmd' && last.className !== 'log-phase') {
+            last.textContent = st.pendingRefresh;
+            st.pendingRefresh = null;
+            changed = true;
+        } else {
+            st.pendingLines.push({ text: st.pendingRefresh, kind: null });
+            st.pendingRefresh = null;
+        }
     }
-    appendLogLine(st, text, null);
+
+    for (const { text, kind } of st.pendingLines) {
+        // Cap total lines: drop the oldest to keep the DOM light for long runs
+        if (st.lineCount >= 4000) {
+            const first = st.pre.firstElementChild;
+            if (first) { first.remove(); st.lineCount--; }
+        }
+        const div = document.createElement('div');
+        div.textContent = text;
+        if (kind === 'cmd') div.className = 'log-cmd';
+        else if (kind === 'phase') div.className = 'log-phase';
+        else if (/^(error|fatal)/i.test(text)) div.className = 'log-err';
+        else if (/^warning:/i.test(text)) div.className = 'log-warn';
+        frag.appendChild(div);
+        st.lineCount++;
+    }
+    st.pendingLines.length = 0;
+    if (frag.childNodes.length > 0) {
+        st.pre.appendChild(frag);
+        changed = true;
+    }
+    if (changed) st.pre.scrollTop = st.pre.scrollHeight;
 }
 
 window.setButtonLoading = setButtonLoading;
@@ -2102,7 +2122,7 @@ window.switchMirror = function(id) {
 
     showModal('切换镜像源',
         '<p style="margin:0 0 12px;line-height:1.7;font-size:13px;color:var(--text-secondary)">确定要将 Homebrew 镜像源切换为 <b style="color:var(--text-primary)">' + escapeHtml(src.name) + '</b> 吗？</p>'
-        + '<p style="margin:0;line-height:1.7;font-size:12px;color:var(--text-muted)">切换会修改 shell 配置文件（~/.zshrc）并立即对当前应用生效；下载异常时可随时切回官方源。原配置文件会备份为 .bak。</p>',
+        + '<p style="margin:0;line-height:1.7;font-size:12px;color:var(--text-muted)">切换会写入对应的 shell 配置文件（macOS 默认 ~/.zshrc，fish/bash 用户写各自的配置文件）并立即对当前应用生效；下载异常时可随时切回官方源。原配置文件会备份为 .bak。</p>',
         async () => {
             try {
                 await App.SetMirrorSource(id);
@@ -2201,26 +2221,6 @@ async function unpinPackage(name) {
         showToast(`${name} 已解锁`, 'success');
     } catch (err) {
         showToast('解锁失败: ' + err.message, 'error');
-    }
-}
-
-window.linkPackage = linkPackage;
-async function linkPackage(name) {
-    try {
-        await Service.Link(name);
-        showToast(`${name} 已链接`, 'success');
-    } catch (err) {
-        showToast(`链接失败: ${err.message}`, 'error');
-    }
-}
-
-window.unlinkPackage = unlinkPackage;
-async function unlinkPackage(name) {
-    try {
-        await Service.Unlink(name);
-        showToast(`${name} 已断开链接`, 'success');
-    } catch (err) {
-        showToast(`断开链接失败: ${err.message}`, 'error');
     }
 }
 

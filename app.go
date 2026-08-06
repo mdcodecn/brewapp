@@ -40,11 +40,6 @@ func (a *App) ResetBrewDetection() {
 	a.brewService.ResetBrewDetection()
 }
 
-// GetDependencies returns dependencies for a package
-func (a *App) GetDependencies(name string) ([]string, error) {
-	return a.brewService.GetDependencies(name)
-}
-
 // Autoremove removes orphaned dependencies
 func (a *App) Autoremove() error {
 	return a.brewService.Autoremove()
@@ -65,34 +60,19 @@ func (a *App) GetOutdatedWithVersion() ([]BrewPackage, error) {
 	return a.brewService.GetOutdatedWithVersion()
 }
 
-// Update runs brew update
-func (a *App) Update() error {
-	return a.brewService.Update()
-}
-
 // UpdateWithOutput runs brew update and returns its output
 func (a *App) UpdateWithOutput() (string, error) {
 	return a.brewService.UpdateWithOutput()
 }
 
-// Doctor runs brew doctor
+// Doctor runs brew doctor and returns its output
 func (a *App) Doctor() (string, error) {
 	return a.brewService.Doctor()
-}
-
-// Config returns brew config
-func (a *App) Config() (string, error) {
-	return a.brewService.Config()
 }
 
 // GetLeaves returns top-level packages
 func (a *App) GetLeaves() ([]string, error) {
 	return a.brewService.GetLeaves()
-}
-
-// GetMissing returns packages with missing dependencies
-func (a *App) GetMissing() ([]string, error) {
-	return a.brewService.GetMissing()
 }
 
 // GetUses returns packages that depend on the given package
@@ -110,19 +90,14 @@ func (a *App) Unpin(name string) error {
 	return a.brewService.Unpin(name)
 }
 
-// Link links a package
-func (a *App) Link(name string) error {
-	return a.brewService.Link(name)
-}
-
-// Unlink unlinks a package
-func (a *App) Unlink(name string) error {
-	return a.brewService.Unlink(name)
-}
-
 // GetVulns returns known vulnerabilities
 func (a *App) GetVulns() (string, error) {
 	return a.brewService.GetVulns()
+}
+
+// GetPackageDetail returns package info, install time and dependencies in one call
+func (a *App) GetPackageDetail(name, pkgType string) (*PackageDetail, error) {
+	return a.brewService.GetPackageDetail(name, pkgType)
 }
 
 // GetMirrorSources returns the Homebrew mirror presets and the current one

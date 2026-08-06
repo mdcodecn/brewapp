@@ -196,6 +196,40 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class PackageDetail {
+	    name: string;
+	    version: string;
+	    latest_version?: string;
+	    description: string;
+	    type: string;
+	    outdated: boolean;
+	    installed: boolean;
+	    pinned: boolean;
+	    depends_on?: string[];
+	    install_time?: string;
+	    install_time?: string;
+	    depends_on?: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new PackageDetail(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.version = source["version"];
+	        this.latest_version = source["latest_version"];
+	        this.description = source["description"];
+	        this.type = source["type"];
+	        this.outdated = source["outdated"];
+	        this.installed = source["installed"];
+	        this.pinned = source["pinned"];
+	        this.depends_on = source["depends_on"];
+	        this.install_time = source["install_time"];
+	        this.install_time = source["install_time"];
+	        this.depends_on = source["depends_on"];
+	    }
+	}
 	export class SearchResponse {
 	    results: BrewSearchResult[];
 	    warnings: string[];

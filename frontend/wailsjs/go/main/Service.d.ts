@@ -8,15 +8,11 @@ export function Autoremove():Promise<void>;
 
 export function Cleanup():Promise<void>;
 
-export function Config():Promise<string>;
-
 export function Doctor():Promise<string>;
 
 export function ExportConfig():Promise<string>;
 
 export function GetBrewInfo():Promise<main.BrewInfo>;
-
-export function GetDependencies(arg1:string):Promise<Array<string>>;
 
 export function GetDiskUsage():Promise<Record<string, string>>;
 
@@ -24,17 +20,11 @@ export function GetLeaves():Promise<Array<string>>;
 
 export function GetMirrorSources():Promise<main.MirrorSourcesResponse>;
 
-export function GetMissing():Promise<Array<string>>;
-
 export function GetOutdated():Promise<Array<main.BrewPackage>>;
 
 export function GetOutdatedWithVersion():Promise<Array<main.BrewPackage>>;
 
-export function GetPackageInfo(arg1:string,arg2:string):Promise<main.BrewPackage>;
-
-export function GetPackageInstallTime(arg1:string):Promise<string>;
-
-export function GetStats():Promise<Record<string, string>>;
+export function GetPackageDetail(arg1:string,arg2:string):Promise<main.PackageDetail>;
 
 export function GetTaps():Promise<Array<string>>;
 
@@ -51,8 +41,6 @@ export function ImportConfig():Promise<main.ImportResult>;
 export function Install(arg1:string,arg2:string):Promise<void>;
 
 export function KillService(arg1:string):Promise<void>;
-
-export function Link(arg1:string):Promise<void>;
 
 export function ListInstalled():Promise<Array<main.BrewPackage>>;
 
@@ -82,13 +70,9 @@ export function TrustTap(arg1:string):Promise<void>;
 
 export function Uninstall(arg1:string,arg2:string):Promise<void>;
 
-export function Unlink(arg1:string):Promise<void>;
-
 export function Unpin(arg1:string):Promise<void>;
 
 export function UntrustTap(arg1:string):Promise<void>;
-
-export function Update():Promise<void>;
 
 export function UpdateWithOutput():Promise<string>;
 

@@ -45,11 +45,11 @@ type BrewService struct {
 
 // BrewSearchResult represents a search result from brew search
 type BrewSearchResult struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Description string `json:"description"`
-	Type        string `json:"type"`
-	Installed   bool   `json:"installed"`
+	Name        string  `json:"name"`
+	Version     string  `json:"version"`
+	Description string  `json:"description"`
+	Type        string  `json:"type"`
+	Installed   bool    `json:"installed"`
 	Score       float64 `json:"score,omitempty"`
 }
 
@@ -63,9 +63,20 @@ func NewService() *Service {
 	return &Service{}
 }
 
-// debugLog appends a timestamped line to /tmp/bm_debug.log (temporary
-// instrumentation for diagnosing the brew:progress event pipeline).
+// debugLog appends a timestamped line to /tmp/bm_debug.log, but only when the
+// BM_DEBUG environment variable is set — the default is a no-op so the
+// per-event instrumentation never costs file I/O (open/write/close per line)
+// in normal runs.
+var (
+	debugLogOnce sync.Once
+	debugLogOn   bool
+)
+
 func debugLog(format string, args ...interface{}) {
+	debugLogOnce.Do(func() { debugLogOn = os.Getenv("BM_DEBUG") != "" })
+	if !debugLogOn {
+		return
+	}
 	f, err := os.OpenFile("/tmp/bm_debug.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
 		return
@@ -433,41 +444,74 @@ type installedInfoJSON struct {
 	} `json:"casks"`
 }
 
+// formulaV2Info mirrors one entry of the formulae array in `brew info --json=v2`.
+type formulaV2Info struct {
+	Name     string `json:"name"`
+	Desc     string `json:"desc"`
+	Versions struct {
+		Stable string `json:"stable"`
+	} `json:"versions"`
+	// Newer Homebrew schema: flat dependency arrays
+	Dependencies            []string `json:"dependencies"`
+	BuildDependencies       []string `json:"build_dependencies"`
+	TestDependencies        []string `json:"test_dependencies"`
+	RecommendedDependencies []string `json:"recommended_dependencies"`
+	OptionalDependencies    []string `json:"optional_dependencies"`
+	// Older Homebrew schema: grouped object (deprecated, may be absent)
+	DependsOn struct {
+		Build       []string `json:"build"`
+		Optional    []string `json:"optional"`
+		Recommended []string `json:"recommended"`
+		Test        []string `json:"test"`
+		Required    []string `json:"required"`
+	} `json:"depends_on"`
+	Installed []struct {
+		Time    int64  `json:"time"`
+		Version string `json:"version"`
+	} `json:"installed"`
+	Pinned bool `json:"pinned"`
+}
+
 // infoV2JSON holds the fields we need from `brew info --json=v2 <name>`.
 // The v2 format always wraps results in an object with formulae/casks arrays
 // (unlike the v1 format, which is a bare array of formula objects).
 type infoV2JSON struct {
-	Formulae []struct {
-		Name    string `json:"name"`
-		Desc    string `json:"desc"`
-		Versions struct {
-			Stable string `json:"stable"`
-		} `json:"versions"`
-		// Newer Homebrew schema: flat dependency arrays
-		Dependencies            []string `json:"dependencies"`
-		BuildDependencies       []string `json:"build_dependencies"`
-		TestDependencies        []string `json:"test_dependencies"`
-		RecommendedDependencies []string `json:"recommended_dependencies"`
-		OptionalDependencies    []string `json:"optional_dependencies"`
-		// Older Homebrew schema: grouped object (deprecated, may be absent)
-		DependsOn struct {
-			Build       []string `json:"build"`
-			Optional    []string `json:"optional"`
-			Recommended []string `json:"recommended"`
-			Test        []string `json:"test"`
-			Required    []string `json:"required"`
-		} `json:"depends_on"`
-		Installed []struct {
-			Time    int64  `json:"time"`
-			Version string `json:"version"`
-		} `json:"installed"`
-	} `json:"formulae"`
-	Casks []struct {
+	Formulae []formulaV2Info `json:"formulae"`
+	Casks    []struct {
 		Token         string `json:"token"`
 		Desc          string `json:"desc"`
 		Version       string `json:"version"`
 		InstalledTime int64  `json:"installed_time"`
+		Pinned        bool   `json:"pinned"`
 	} `json:"casks"`
+}
+
+// mergeDependencies collects the flat (new schema) and grouped (old schema)
+// dependency arrays of a formula into one de-duplicated list, preserving order.
+func mergeDependencies(f formulaV2Info) []string {
+	raw := make([]string, 0, 8)
+	raw = append(raw, f.Dependencies...)
+	raw = append(raw, f.BuildDependencies...)
+	raw = append(raw, f.RecommendedDependencies...)
+	raw = append(raw, f.OptionalDependencies...)
+	raw = append(raw, f.TestDependencies...)
+	d := f.DependsOn
+	raw = append(raw, d.Build...)
+	raw = append(raw, d.Optional...)
+	raw = append(raw, d.Recommended...)
+	raw = append(raw, d.Test...)
+	raw = append(raw, d.Required...)
+
+	seen := make(map[string]bool, len(raw))
+	deps := make([]string, 0, len(raw))
+	for _, dep := range raw {
+		if dep == "" || seen[dep] {
+			continue
+		}
+		seen[dep] = true
+		deps = append(deps, dep)
+	}
+	return deps
 }
 
 // getInstalledDescriptions maps package name -> description using one brew call
@@ -490,82 +534,52 @@ func (s *Service) getInstalledDescriptions() map[string]string {
 	return desc
 }
 
-// ListInstalled returns all installed packages
+// ListInstalled returns all installed packages.
+// A single `brew info --json=v2 --installed` call carries the name, installed
+// version, description, install time and pinned state for both casks and
+// formulae — replacing the previous four subprocess calls (list --cask,
+// list --formula, info --json=v2 --installed, list --pinned).
 func (s *Service) ListInstalled() ([]BrewPackage, error) {
-	// Use "brew list --versions" for both casks and formulas
-	// Format: "name version1 [version2 ...]" (one line per package)
-	caskOutput, _ := s.runBrew("list", "--cask", "--versions")
-	formulaOutput, _ := s.runBrew("list", "--formula", "--versions")
+	output, err := s.runBrew("info", "--json=v2", "--installed")
+	if err != nil {
+		return []BrewPackage{}, err
+	}
+	var data infoV2JSON
+	if err := json.Unmarshal([]byte(output), &data); err != nil {
+		return []BrewPackage{}, err
+	}
 
-	packages := make([]BrewPackage, 0)
-
-	// Parse casks
-	for _, line := range strings.Split(strings.TrimSpace(caskOutput), "\n") {
-		line = strings.TrimSpace(line)
-		if isBrewNoiseLine(line) {
-			continue
+	packages := make([]BrewPackage, 0, len(data.Casks)+len(data.Formulae))
+	// Casks first, then formulae (keeps the previous ordering).
+	for _, c := range data.Casks {
+		packages = append(packages, BrewPackage{
+			Name:        c.Token,
+			Version:     c.Version,
+			Description: c.Desc,
+			Type:        "cask",
+			Pinned:      c.Pinned,
+		})
+	}
+	for _, f := range data.Formulae {
+		version := ""
+		var installTime int64
+		if len(f.Installed) > 0 {
+			version = f.Installed[0].Version
+			installTime = f.Installed[0].Time
 		}
-		pkg := s.parseVersionsLine(line, "cask")
+		pkg := BrewPackage{
+			Name:        f.Name,
+			Version:     version,
+			Description: f.Desc,
+			Type:        "formula",
+			Pinned:      f.Pinned,
+		}
+		if installTime > 0 {
+			pkg.InstallTime = time.Unix(installTime, 0).Format("2006-01-02 15:04:05")
+		}
 		packages = append(packages, pkg)
 	}
-
-	// Parse formulas (exclude those that are also casks)
-	caskNames := make(map[string]bool)
-	for _, pkg := range packages {
-		caskNames[pkg.Name] = true
-	}
-
-	for _, line := range strings.Split(strings.TrimSpace(formulaOutput), "\n") {
-		line = strings.TrimSpace(line)
-		if isBrewNoiseLine(line) {
-			continue
-		}
-		pkg := s.parseVersionsLine(line, "formula")
-		if caskNames[pkg.Name] {
-			continue
-		}
-		packages = append(packages, pkg)
-	}
-
-	// Enrich with descriptions (single JSON call, falls back gracefully)
-	descMap := s.getInstalledDescriptions()
-	for i := range packages {
-		packages[i].Description = descMap[packages[i].Name]
-	}
-
-	// Mark pinned formulae (`brew pin` only applies to formulae)
-	pinned := make(map[string]bool)
-	if out, err := s.runBrew("list", "--pinned"); err == nil {
-		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-			if t := strings.TrimSpace(line); t != "" {
-				pinned[t] = true
-			}
-		}
-	}
-	for i := range packages {
-		packages[i].Pinned = pinned[packages[i].Name]
-	}
-
 	return packages, nil
-}
-
-// parseVersionsLine parses a line from "brew list --versions" output
-// Format: "name version1 [version2 ...]"
-func (s *Service) parseVersionsLine(line, pkgType string) BrewPackage {
-	pkg := BrewPackage{
-		Type: pkgType,
-	}
-
-	parts := strings.Fields(line)
-	if len(parts) == 0 {
-		return pkg
-	}
-	pkg.Name = parts[0]
-	if len(parts) >= 2 {
-		pkg.Version = parts[1] // latest installed version
-	}
-
-	return pkg
 }
 
 // runBrewRetryUntrusted runs a brew command whose final argument is a
@@ -605,22 +619,33 @@ func qualifiedInfoName(name string, err error) string {
 	return name
 }
 
-// GetPackageInfo returns detailed info for a single package (description + version)
-func (s *Service) GetPackageInfo(name, pkgType string) (BrewPackage, error) {
+// PackageDetail aggregates everything the package detail modal needs, fetched
+// with a single `brew info --json=v2 <name>` call (previously three separate
+// brew invocations: GetPackageInfo + GetDependencies + GetPackageInstallTime).
+type PackageDetail struct {
+	BrewPackage
+	InstallTime string   `json:"install_time,omitempty"`
+	DependsOn   []string `json:"depends_on,omitempty"`
+}
+
+// GetPackageDetail returns package info, install time and dependencies for a
+// single package in one brew call. GetUses stays separate (it is a different
+// command: `brew uses --installed <name>`).
+func (s *Service) GetPackageDetail(name, pkgType string) (*PackageDetail, error) {
+	detail := &PackageDetail{BrewPackage: BrewPackage{Name: name, Type: pkgType}}
+
 	// First check if the package is installed.
 	// Note: `brew list <name>` prints installed file paths, so it cannot be
 	// used to test installation. `brew list --versions <name>` prints
 	// "<name> <version>" when installed and nothing (exit 1) otherwise.
 	// Casks require the --cask flag (unlike plain `brew list`, which
 	// auto-detects them, `--versions` does not).
-	installed := false
 	listArgs := []string{"list", "--versions"}
 	if pkgType == "cask" {
 		listArgs = append(listArgs, "--cask")
 	}
 	listArgs = append(listArgs, name)
-	listOut, err := s.runBrew(listArgs...)
-	if err == nil {
+	if listOut, err := s.runBrew(listArgs...); err == nil {
 		// "<name> <version>" per line when installed; guard against warning
 		// lines being counted as an installed package
 		for _, line := range strings.Split(strings.TrimSpace(listOut), "\n") {
@@ -629,52 +654,61 @@ func (s *Service) GetPackageInfo(name, pkgType string) (BrewPackage, error) {
 			}
 			parts := strings.Fields(line)
 			if len(parts) > 0 && parts[0] == name {
-				installed = true
+				detail.Installed = true
 				break
 			}
 		}
 	}
 
-	pkg := BrewPackage{Name: name, Type: pkgType, Installed: installed}
-
-	// Primary: v2 format (object with formulae/casks arrays)
+	// Primary: v2 format (object with formulae/casks arrays) — description,
+	// version, install time and dependencies all come from this one call.
 	jsonOutput, err := s.brewInfoJSON(name, "info", "--json=v2")
 	if err == nil {
 		var data infoV2JSON
 		if jsonErr := json.Unmarshal([]byte(jsonOutput), &data); jsonErr == nil {
 			if pkgType == "cask" && len(data.Casks) > 0 {
-				pkg.Description = data.Casks[0].Desc
-				pkg.Version = data.Casks[0].Version
-				return pkg, nil
+				c := data.Casks[0]
+				detail.Description = c.Desc
+				detail.Version = c.Version
+				if c.InstalledTime > 0 {
+					detail.InstallTime = time.Unix(c.InstalledTime, 0).Format("2006-01-02 15:04:05")
+				}
+				return detail, nil
 			}
 			if len(data.Formulae) > 0 {
-				pkg.Description = data.Formulae[0].Desc
-				pkg.Version = data.Formulae[0].Versions.Stable
-				return pkg, nil
+				f := data.Formulae[0]
+				detail.Description = f.Desc
+				detail.Version = f.Versions.Stable
+				if len(f.Installed) > 0 && f.Installed[0].Time > 0 {
+					detail.InstallTime = time.Unix(f.Installed[0].Time, 0).Format("2006-01-02 15:04:05")
+				}
+				detail.DependsOn = mergeDependencies(f)
+				return detail, nil
 			}
 		}
 	}
 
-	// Fallback: v1 format (bare array of formula objects) for older brew versions
+	// Fallback: v1 format (bare array of formula objects) for older brew
+	// versions — description and version only (no deps / install time).
 	jsonOutput, err = s.brewInfoJSON(name, "info", "--json")
 	if err != nil {
-		return pkg, err
+		return detail, err
 	}
 	var info []struct {
-		Name    string `json:"name"`
-		Desc    string `json:"desc"`
+		Name     string `json:"name"`
+		Desc     string `json:"desc"`
 		Versions struct {
 			Stable string `json:"stable"`
 		} `json:"versions"`
 	}
 	if err := json.Unmarshal([]byte(jsonOutput), &info); err != nil {
-		return pkg, err
+		return detail, err
 	}
 	if len(info) > 0 {
-		pkg.Description = info[0].Desc
-		pkg.Version = info[0].Versions.Stable
+		detail.Description = info[0].Desc
+		detail.Version = info[0].Versions.Stable
 	}
-	return pkg, nil
+	return detail, nil
 }
 
 // SearchResponse wraps search results together with non-fatal warnings
@@ -682,6 +716,42 @@ func (s *Service) GetPackageInfo(name, pkgType string) (BrewPackage, error) {
 type SearchResponse struct {
 	Results  []BrewSearchResult `json:"results"`
 	Warnings []string           `json:"warnings"`
+}
+
+// installedSetTTL matches the 5-minute cache window the frontend uses, so a
+// debounced search doesn't spawn two brew subprocesses on every keystroke.
+const installedSetTTL = 5 * time.Minute
+
+var (
+	installedSetMu    sync.Mutex
+	installedSetCache map[string]bool
+	installedSetTime  time.Time
+)
+
+// installedSet returns the set of installed package names (casks + formulae),
+// cached for installedSetTTL to avoid repeated `brew list` calls.
+func (s *Service) installedSet() map[string]bool {
+	installedSetMu.Lock()
+	defer installedSetMu.Unlock()
+	if installedSetCache != nil && time.Since(installedSetTime) < installedSetTTL {
+		return installedSetCache
+	}
+
+	set := make(map[string]bool)
+	for _, args := range [][]string{{"list"}, {"list", "--cask"}} {
+		out, err := s.runBrew(args...)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			if t := strings.TrimSpace(line); t != "" && !isBrewNoiseLine(t) {
+				set[t] = true
+			}
+		}
+	}
+	installedSetCache = set
+	installedSetTime = time.Now()
+	return set
 }
 
 // Search searches for packages matching the query.
@@ -693,24 +763,8 @@ func (s *Service) Search(query string) (*SearchResponse, error) {
 		return &SearchResponse{}, nil
 	}
 
-	// First get installed package names for quick lookup
-	installedOutput, _ := s.runBrew("list")
-	installedCaskOutput, _ := s.runBrew("list", "--cask")
-	installedSet := make(map[string]bool)
-	for _, line := range strings.Split(strings.TrimSpace(installedOutput), "\n") {
-		line = strings.TrimSpace(line)
-		if isBrewNoiseLine(line) {
-			continue
-		}
-		installedSet[line] = true
-	}
-	for _, line := range strings.Split(strings.TrimSpace(installedCaskOutput), "\n") {
-		line = strings.TrimSpace(line)
-		if isBrewNoiseLine(line) {
-			continue
-		}
-		installedSet[line] = true
-	}
+	// Installed lookup is cached so repeated searches don't re-run brew list
+	installedSet := s.installedSet()
 
 	// Search casks first, then formulas. Each category may fail on its own
 	// (e.g. untrusted tap), so collect warnings instead of dropping results.
@@ -1034,49 +1088,6 @@ func (s *Service) Cleanup() error {
 	return nil
 }
 
-// GetStats returns brew statistics
-func (s *Service) GetStats() (map[string]string, error) {
-	result := make(map[string]string)
-
-	// Get installed formula count
-	formulaOutput, err := s.runBrew("list")
-	if err == nil {
-		count := 0
-		for _, line := range strings.Split(strings.TrimSpace(formulaOutput), "\n") {
-			if !isBrewNoiseLine(line) {
-				count++
-			}
-		}
-		result["installed_formulas"] = fmt.Sprintf("%d", count)
-	}
-
-	// Get installed cask count
-	caskOutput, err := s.runBrew("list", "--cask")
-	if err == nil {
-		count := 0
-		for _, line := range strings.Split(strings.TrimSpace(caskOutput), "\n") {
-			if !isBrewNoiseLine(line) {
-				count++
-			}
-		}
-		result["installed_casks"] = fmt.Sprintf("%d", count)
-	}
-
-	// Get outdated count
-	outdatedOutput, err := s.runBrew("outdated")
-	if err == nil {
-		count := 0
-		for _, line := range strings.Split(strings.TrimSpace(outdatedOutput), "\n") {
-			if !isBrewNoiseLine(line) {
-				count++
-			}
-		}
-		result["outdated"] = fmt.Sprintf("%d", count)
-	}
-
-	return result, nil
-}
-
 // TrustInfo describes which taps are trusted via `brew trust` (Homebrew 6+).
 // Supported is false on older Homebrew versions without the trust command.
 type TrustInfo struct {
@@ -1143,52 +1154,45 @@ func (s *Service) GetTaps() ([]string, error) {
 	return taps, nil
 }
 
-// GetDiskUsage returns disk usage info for brew directories
+// GetDiskUsage returns disk usage info for brew directories.
+// The six `du` runs are parallelized (each can take 1-3s on a large Cellar) so
+// the total wait is bounded by the slowest directory instead of the sum.
 func (s *Service) GetDiskUsage() (map[string]string, error) {
-	result := make(map[string]string)
-
-	// Also check Intel paths
-	intelDirs := []struct {
+	dirs := []struct {
 		label string
 		path  string
 	}{
 		{"Cellar (Intel)", "/usr/local/Cellar"},
 		{"Caskroom (Intel)", "/usr/local/Caskroom"},
 		{"Cache (Intel)", "/usr/local/Caches/Homebrew"},
-	}
-	for _, dir := range intelDirs {
-		if _, ok := result[dir.label]; !ok {
-			cmd := exec.Command("du", "-sh", dir.path)
-			output, err := cmd.Output()
-			if err == nil {
-				parts := strings.Fields(string(output))
-				if len(parts) > 0 {
-					result[dir.label] = parts[0]
-				}
-			}
-		}
-	}
-
-	dirs := []struct {
-		label string
-		path  string
-	}{
 		{"Cellar", "/opt/homebrew/Cellar"},
 		{"Caskroom", "/opt/homebrew/Caskroom"},
 		{"Cache", "/opt/homebrew/Caches/Homebrew"},
 	}
 
-	for _, dir := range dirs {
-		cmd := exec.Command("du", "-sh", dir.path)
-		output, err := cmd.Output()
-		if err == nil {
-			parts := strings.Fields(string(output))
-			if len(parts) > 0 {
-				result[dir.label] = parts[0]
+	result := make(map[string]string)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, d := range dirs {
+		wg.Add(1)
+		go func(label, path string) {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			defer cancel()
+			output, err := exec.CommandContext(ctx, "du", "-sh", path).Output()
+			if err != nil {
+				return
 			}
-		}
+			parts := strings.Fields(string(output))
+			if len(parts) == 0 {
+				return
+			}
+			mu.Lock()
+			result[label] = parts[0]
+			mu.Unlock()
+		}(d.label, d.path)
 	}
-
+	wg.Wait()
 	return result, nil
 }
 
@@ -1358,75 +1362,6 @@ func parseConfigBackup(content string) (casks, formulas []string) {
 	return casks, formulas
 }
 
-// GetDependencies returns the dependencies for a package
-func (s *Service) GetDependencies(name string) ([]string, error) {
-	jsonOutput, err := s.brewInfoJSON(name, "info", "--json=v2")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get dependencies for %s: %w", name, err)
-	}
-
-	// v2 format: object with formulae array. Homebrew moved from a grouped
-	// `depends_on` object to flat arrays (dependencies / build_dependencies / ...),
-	// so both schemas are handled here.
-	var data infoV2JSON
-	if err := json.Unmarshal([]byte(jsonOutput), &data); err != nil {
-		// Fallback: v1 format (bare array, depends_on is a flat string list)
-		return s.getDependenciesV1(name)
-	}
-	if len(data.Formulae) == 0 {
-		return []string{}, nil
-	}
-
-	f := data.Formulae[0]
-	raw := make([]string, 0, 8)
-	// New schema: flat arrays
-	raw = append(raw, f.Dependencies...)
-	raw = append(raw, f.BuildDependencies...)
-	raw = append(raw, f.RecommendedDependencies...)
-	raw = append(raw, f.OptionalDependencies...)
-	raw = append(raw, f.TestDependencies...)
-	// Old schema: grouped object
-	d := f.DependsOn
-	raw = append(raw, d.Build...)
-	raw = append(raw, d.Optional...)
-	raw = append(raw, d.Recommended...)
-	raw = append(raw, d.Test...)
-	raw = append(raw, d.Required...)
-
-	// Deduplicate, preserving order
-	seen := make(map[string]bool, len(raw))
-	deps := make([]string, 0, len(raw))
-	for _, dep := range raw {
-		if dep == "" || seen[dep] {
-			continue
-		}
-		seen[dep] = true
-		deps = append(deps, dep)
-	}
-	return deps, nil
-}
-
-// getDependenciesV1 uses the v1 JSON format as fallback
-func (s *Service) getDependenciesV1(name string) ([]string, error) {
-	jsonOutput, err := s.brewInfoJSON(name, "info", "--json")
-	if err != nil {
-		return nil, err
-	}
-
-	var info []struct {
-		Name      string `json:"name"`
-		DependsOn []string `json:"depends_on"`
-	}
-	if err := json.Unmarshal([]byte(jsonOutput), &info); err != nil {
-		return nil, err
-	}
-
-	if len(info) == 0 {
-		return []string{}, nil
-	}
-	return info[0].DependsOn, nil
-}
-
 // Autoremove removes orphaned dependencies, streaming live progress
 func (s *Service) Autoremove() error {
 	_, err := s.runBrewStreaming("autoremove", "autoremove")
@@ -1454,54 +1389,6 @@ func (s *Service) RemoveTap(tap string) error {
 	return nil
 }
 
-// GetPackageInstallTime returns the installation time of a package
-func (s *Service) GetPackageInstallTime(name string) (string, error) {
-	// Primary: v2 format (object with formulae/casks arrays)
-	jsonOutput, err := s.brewInfoJSON(name, "info", "--json=v2")
-	if err == nil {
-		var data infoV2JSON
-		if jsonErr := json.Unmarshal([]byte(jsonOutput), &data); jsonErr == nil {
-			var ts int64
-			if len(data.Casks) > 0 {
-				ts = data.Casks[0].InstalledTime
-			} else if len(data.Formulae) > 0 && len(data.Formulae[0].Installed) > 0 {
-				ts = data.Formulae[0].Installed[0].Time
-			}
-			if ts > 0 {
-				return time.Unix(ts, 0).Format("2006-01-02 15:04:05"), nil
-			}
-			return "", nil
-		}
-	}
-
-	// Fallback: v1 format (bare array of formula objects)
-	jsonOutput, err = s.brewInfoJSON(name, "info", "--json")
-	if err != nil {
-		return "", err
-	}
-	var info []struct {
-		Installed []struct {
-			Time int64 `json:"time"`
-		} `json:"installed"`
-	}
-	if err := json.Unmarshal([]byte(jsonOutput), &info); err != nil {
-		return "", err
-	}
-	if len(info) > 0 && len(info[0].Installed) > 0 && info[0].Installed[0].Time > 0 {
-		return time.Unix(info[0].Installed[0].Time, 0).Format("2006-01-02 15:04:05"), nil
-	}
-	return "", nil
-}
-
-// Update runs brew update
-func (s *Service) Update() error {
-	_, err := s.runBrew("update")
-	if err != nil {
-		return fmt.Errorf("failed to update: %w", err)
-	}
-	return nil
-}
-
 // UpdateWithOutput runs brew update and streams its output live, so the UI
 // can show fetch progress instead of waiting for the whole command to finish.
 func (s *Service) UpdateWithOutput() (string, error) {
@@ -1522,15 +1409,6 @@ func (s *Service) Doctor() (string, error) {
 	return output, nil
 }
 
-// Config returns brew config output
-func (s *Service) Config() (string, error) {
-	output, err := s.runBrew("config")
-	if err != nil {
-		return "", fmt.Errorf("failed to get config: %w", err)
-	}
-	return output, nil
-}
-
 // GetLeaves returns top-level (non-dependency) packages
 func (s *Service) GetLeaves() ([]string, error) {
 	output, err := s.runBrew("leaves")
@@ -1546,23 +1424,6 @@ func (s *Service) GetLeaves() ([]string, error) {
 		leaves = append(leaves, line)
 	}
 	return leaves, nil
-}
-
-// GetMissing returns packages with missing dependencies
-func (s *Service) GetMissing() ([]string, error) {
-	output, err := s.runBrew("missing")
-	if err != nil {
-		return []string{}, nil
-	}
-	var missing []string
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		line = strings.TrimSpace(line)
-		if isBrewNoiseLine(line) {
-			continue
-		}
-		missing = append(missing, line)
-	}
-	return missing, nil
 }
 
 // isBrewNoiseLine reports whether a line from brew CLI output should be
@@ -1613,24 +1474,6 @@ func (s *Service) Unpin(name string) error {
 	return nil
 }
 
-// Link links a package
-func (s *Service) Link(name string) error {
-	_, err := s.runBrew("link", name)
-	if err != nil {
-		return fmt.Errorf("failed to link %s: %w", name, err)
-	}
-	return nil
-}
-
-// Unlink unlinks a package
-func (s *Service) Unlink(name string) error {
-	_, err := s.runBrew("unlink", name)
-	if err != nil {
-		return fmt.Errorf("failed to unlink %s: %w", name, err)
-	}
-	return nil
-}
-
 // GetVulns returns known vulnerabilities
 func (s *Service) GetVulns() (string, error) {
 	output, err := s.runBrew("vulns")
@@ -1647,39 +1490,49 @@ func (s *Service) GetOutdatedWithVersion() ([]BrewPackage, error) {
 		return []BrewPackage{}, nil
 	}
 
+	// Build the cask set once — previously `brew list --cask` was re-queried
+	// inside the loop (N+1 subprocess calls).
+	caskSet := make(map[string]bool)
+	if caskOut, err := s.runBrew("list", "--cask"); err == nil {
+		for _, line := range strings.Split(strings.TrimSpace(caskOut), "\n") {
+			caskSet[strings.TrimSpace(line)] = true
+		}
+	}
+
+	packages := classifyOutdated(output, caskSet)
+	// Sort: casks first, then formulas (stable, keeps brew's original order within each type)
+	sort.SliceStable(packages, func(i, j int) bool {
+		return packages[i].Type == "cask" && packages[j].Type != "cask"
+	})
+	return packages, nil
+}
+
+// classifyOutdated parses `brew outdated` text output ("name current latest"
+// per line) into packages, classifying each as cask/formula via caskSet.
+// Lines with fewer than three fields and brew noise lines are skipped.
+func classifyOutdated(output string, caskSet map[string]bool) []BrewPackage {
 	packages := make([]BrewPackage, 0)
 	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
 		line = strings.TrimSpace(line)
 		if isBrewNoiseLine(line) {
 			continue
 		}
-
 		parts := strings.Fields(line)
-		if len(parts) >= 3 {
-			pkg := BrewPackage{
-				Name:        parts[0],
-				Version:     parts[1], // current version
-				Outdated:    true,
-				Type:        "formula",
-			}
-			// Check if it's a cask by checking list --cask output
-			caskOut, _ := s.runBrew("list", "--cask")
-			for _, caskLine := range strings.Split(strings.TrimSpace(caskOut), "\n") {
-				if strings.TrimSpace(caskLine) == parts[0] {
-					pkg.Type = "cask"
-					break
-				}
-			}
-			packages = append(packages, pkg)
+		if len(parts) < 3 {
+			continue
 		}
+		pkg := BrewPackage{
+			Name:     parts[0],
+			Version:  parts[1], // current version
+			Outdated: true,
+			Type:     "formula",
+		}
+		if caskSet[parts[0]] {
+			pkg.Type = "cask"
+		}
+		packages = append(packages, pkg)
 	}
-
-	// Sort: casks first, then formulas (stable, keeps brew's original order within each type)
-	sort.SliceStable(packages, func(i, j int) bool {
-		return packages[i].Type == "cask" && packages[j].Type != "cask"
-	})
-
-	return packages, nil
+	return packages
 }
 
 // ===== brew services =====

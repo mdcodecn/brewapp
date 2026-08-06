@@ -10,20 +10,12 @@ export function Autoremove() {
   return window['go']['main']['App']['Autoremove']();
 }
 
-export function Config() {
-  return window['go']['main']['App']['Config']();
-}
-
 export function Doctor() {
   return window['go']['main']['App']['Doctor']();
 }
 
 export function GetBrewInfo() {
   return window['go']['main']['App']['GetBrewInfo']();
-}
-
-export function GetDependencies(arg1) {
-  return window['go']['main']['App']['GetDependencies'](arg1);
 }
 
 export function GetLeaves() {
@@ -34,12 +26,12 @@ export function GetMirrorSources() {
   return window['go']['main']['App']['GetMirrorSources']();
 }
 
-export function GetMissing() {
-  return window['go']['main']['App']['GetMissing']();
-}
-
 export function GetOutdatedWithVersion() {
   return window['go']['main']['App']['GetOutdatedWithVersion']();
+}
+
+export function GetPackageDetail(arg1, arg2) {
+  return window['go']['main']['App']['GetPackageDetail'](arg1, arg2);
 }
 
 export function GetUses(arg1) {
@@ -48,10 +40,6 @@ export function GetUses(arg1) {
 
 export function GetVulns() {
   return window['go']['main']['App']['GetVulns']();
-}
-
-export function Link(arg1) {
-  return window['go']['main']['App']['Link'](arg1);
 }
 
 export function Pin(arg1) {
@@ -70,16 +58,8 @@ export function SetMirrorSource(arg1) {
   return window['go']['main']['App']['SetMirrorSource'](arg1);
 }
 
-export function Unlink(arg1) {
-  return window['go']['main']['App']['Unlink'](arg1);
-}
-
 export function Unpin(arg1) {
   return window['go']['main']['App']['Unpin'](arg1);
-}
-
-export function Update() {
-  return window['go']['main']['App']['Update']();
 }
 
 export function UpdateWithOutput() {

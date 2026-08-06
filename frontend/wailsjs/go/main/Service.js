@@ -14,10 +14,6 @@ export function Cleanup() {
   return window['go']['main']['Service']['Cleanup']();
 }
 
-export function Config() {
-  return window['go']['main']['Service']['Config']();
-}
-
 export function Doctor() {
   return window['go']['main']['Service']['Doctor']();
 }
@@ -28,10 +24,6 @@ export function ExportConfig() {
 
 export function GetBrewInfo() {
   return window['go']['main']['Service']['GetBrewInfo']();
-}
-
-export function GetDependencies(arg1) {
-  return window['go']['main']['Service']['GetDependencies'](arg1);
 }
 
 export function GetDiskUsage() {
@@ -46,10 +38,6 @@ export function GetMirrorSources() {
   return window['go']['main']['Service']['GetMirrorSources']();
 }
 
-export function GetMissing() {
-  return window['go']['main']['Service']['GetMissing']();
-}
-
 export function GetOutdated() {
   return window['go']['main']['Service']['GetOutdated']();
 }
@@ -58,16 +46,8 @@ export function GetOutdatedWithVersion() {
   return window['go']['main']['Service']['GetOutdatedWithVersion']();
 }
 
-export function GetPackageInfo(arg1, arg2) {
-  return window['go']['main']['Service']['GetPackageInfo'](arg1, arg2);
-}
-
-export function GetPackageInstallTime(arg1) {
-  return window['go']['main']['Service']['GetPackageInstallTime'](arg1);
-}
-
-export function GetStats() {
-  return window['go']['main']['Service']['GetStats']();
+export function GetPackageDetail(arg1, arg2) {
+  return window['go']['main']['Service']['GetPackageDetail'](arg1, arg2);
 }
 
 export function GetTaps() {
@@ -100,10 +80,6 @@ export function Install(arg1, arg2) {
 
 export function KillService(arg1) {
   return window['go']['main']['Service']['KillService'](arg1);
-}
-
-export function Link(arg1) {
-  return window['go']['main']['Service']['Link'](arg1);
 }
 
 export function ListInstalled() {
@@ -162,20 +138,12 @@ export function Uninstall(arg1, arg2) {
   return window['go']['main']['Service']['Uninstall'](arg1, arg2);
 }
 
-export function Unlink(arg1) {
-  return window['go']['main']['Service']['Unlink'](arg1);
-}
-
 export function Unpin(arg1) {
   return window['go']['main']['Service']['Unpin'](arg1);
 }
 
 export function UntrustTap(arg1) {
   return window['go']['main']['Service']['UntrustTap'](arg1);
-}
-
-export function Update() {
-  return window['go']['main']['Service']['Update']();
 }
 
 export function UpdateWithOutput() {
