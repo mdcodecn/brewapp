@@ -1682,7 +1682,7 @@ function renderServicesPreview(services, loaded) {
         return `
             <div class="service-chip${isRunning ? ' is-running' : ''}">
                 <span class="service-chip-name">${escapeHtml(sv.name)}</span>
-                <button class="service-action-btn service-action-sm ${isRunning ? 'service-action-running' : 'service-action-stopped'}" onclick="toggleService('${escapeHtml(sv.name)}', ${isRunning})" title="${isRunning ? '运行中 · 点击停止' : '已停止 · 点击启动'}">
+                <button class="service-action-btn service-action-sm ${isRunning ? 'service-action-running' : 'service-action-stopped'}" onclick="toggleService('${escapeHtml(sv.name)}', ${!isRunning})" title="${isRunning ? '运行中 · 点击停止' : '已停止 · 点击启动'}">
                     ${isRunning
                         ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
                         : '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'}
