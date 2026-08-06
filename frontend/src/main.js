@@ -777,7 +777,6 @@ async function refreshInstalled() {
         tabCache.installed.timestamp = Date.now();
         renderInstalled(installedType, packages);
         updateInstalledCounts();
-        showToast('已安装列表已刷新', 'success');
     } catch (err) {
         showToast('刷新失败: ' + err.message, 'error');
     }
@@ -793,7 +792,6 @@ async function refreshOutdated() {
         tabCache.outdated.data = outdated;
         tabCache.outdated.timestamp = Date.now();
         renderOutdated(outdated);
-        showToast('更新列表已刷新', 'success');
     } catch (err) {
         showToast('刷新失败: ' + err.message, 'error');
     }
@@ -1191,10 +1189,8 @@ async function exportConfig() {
             setInlineResult('export-config-result', '', true);
             return;
         }
-        showToast('配置已导出: ' + path, 'success');
         setInlineResult('export-config-result', '✓ 配置已导出至：' + path, true);
     } catch (err) {
-        showToast('导出失败: ' + err.message, 'error');
         setInlineResult('export-config-result', '✗ 导出失败：' + err.message, false);
     } finally {
         if (card) card.classList.remove('is-busy');
@@ -1226,7 +1222,6 @@ window.importConfig = async function() {
         }
         const message = lines.join('\n');
 
-        showToast(ok ? '导入完成' : '导入完成，部分软件包失败', ok ? 'success' : 'error');
         setInlineResult('import-config-result', (ok ? '✓ ' : '✗ ') + message, ok);
 
         // Packages changed -> refresh caches
@@ -1241,7 +1236,6 @@ window.importConfig = async function() {
         tabCache.outdated.timestamp = 0;
         installedPackages = [];
     } catch (err) {
-        showToast('导入失败: ' + err.message, 'error');
         setInlineResult('import-config-result', '✗ 导入失败：' + err.message, false);
     } finally {
         if (card) card.classList.remove('is-busy');
@@ -1492,7 +1486,6 @@ async function refreshServices() {
         tabCache.services.timestamp = Date.now();
         updateServiceBadge(services);
         renderServices(services);
-        showToast('服务列表已刷新', 'success');
     } catch (err) {
         showToast('刷新失败: ' + err.message, 'error');
     }
@@ -1598,7 +1591,6 @@ async function restartService(name, btn) {
     const actions = document.querySelectorAll('.service-action-btn');
     actions.forEach(b => { b.disabled = true; });
     if (btn) btn.classList.add('is-busy');
-    showToast(`正在重启 ${name}...`, 'info');
     try {
         await Service.RestartService(name);
         showToast(`服务 ${name} 已重启`, 'success');
@@ -1685,7 +1677,6 @@ async function toggleService(name, on) {
     const actions = document.querySelectorAll('.service-action-btn');
     actions.forEach(b => { b.disabled = true; });
 
-    showToast(`正在${on ? '启动' : '停止'} ${name}...`, 'info');
     try {
         if (on) {
             await Service.StartService(name);
@@ -2030,7 +2021,6 @@ async function togglePin(name, pinned) {
 
 window.pinPackage = pinPackage;
 async function pinPackage(name) {
-    showToast(`${name} 正在锁定...`, 'info');
     try {
         await Service.Pin(name);
         showToast(`${name} 已锁定`, 'success');
@@ -2041,7 +2031,6 @@ async function pinPackage(name) {
 
 window.unpinPackage = unpinPackage;
 async function unpinPackage(name) {
-    showToast(`${name} 正在解锁...`, 'info');
     try {
         await Service.Unpin(name);
         showToast(`${name} 已解锁`, 'success');
@@ -2052,7 +2041,6 @@ async function unpinPackage(name) {
 
 window.linkPackage = linkPackage;
 async function linkPackage(name) {
-    showToast(`${name} 正在链接...`, 'info');
     try {
         await Service.Link(name);
         showToast(`${name} 已链接`, 'success');
@@ -2063,7 +2051,6 @@ async function linkPackage(name) {
 
 window.unlinkPackage = unlinkPackage;
 async function unlinkPackage(name) {
-    showToast(`${name} 正在断开链接...`, 'info');
     try {
         await Service.Unlink(name);
         showToast(`${name} 已断开链接`, 'success');
