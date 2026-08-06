@@ -1836,7 +1836,7 @@ window.runUpdateQuick = function() {
                 tabCache.outdated.data = null;
                 tabCache.outdated.timestamp = 0;
                 if (currentTab === 'dashboard') refreshDashboard();
-                return result.trim() || '✓ brew update 完成！';
+                return result.trim() || 'brew update 完成！';
             } catch (err) {
                 throw new Error(`更新失败: ${err.message}`);
             }
@@ -1854,7 +1854,7 @@ window.runDoctorQuick = function() {
         async () => {
             try {
                 const result = await Service.Doctor();
-                return result || '✓ 系统健康，未发现异常';
+                return result || '系统健康，未发现异常';
             } catch (err) {
                 throw new Error(`诊断失败: ${err.message}`);
             }
@@ -1992,7 +1992,7 @@ window.runVulnsQuick = function() {
         async () => {
             try {
                 const result = await Service.GetVulns();
-                return result || '✓ 未发现已知安全漏洞';
+                return result || '未发现已知安全漏洞';
             } catch (err) {
                 throw new Error(`扫描失败: ${err.message}`);
             }
