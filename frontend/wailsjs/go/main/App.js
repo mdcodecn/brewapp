@@ -34,6 +34,10 @@ export function GetPackageDetail(arg1, arg2) {
   return window['go']['main']['App']['GetPackageDetail'](arg1, arg2);
 }
 
+export function GetSystemProxy() {
+  return window['go']['main']['App']['GetSystemProxy']();
+}
+
 export function GetUses(arg1) {
   return window['go']['main']['App']['GetUses'](arg1);
 }
@@ -56,6 +60,10 @@ export function ResetBrewDetection() {
 
 export function SetMirrorSource(arg1) {
   return window['go']['main']['App']['SetMirrorSource'](arg1);
+}
+
+export function SetSystemProxyEnabled(arg1) {
+  return window['go']['main']['App']['SetSystemProxyEnabled'](arg1);
 }
 
 export function TestMirrorSpeeds() {

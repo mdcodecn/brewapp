@@ -114,3 +114,13 @@ func (a *App) SetMirrorSource(id string) error {
 func (a *App) TestMirrorSpeeds() []MirrorSpeedResult {
 	return a.brewService.TestMirrorSpeeds()
 }
+
+// GetSystemProxy returns the detected macOS system proxy and the current toggle state
+func (a *App) GetSystemProxy() *SystemProxyStatus {
+	return a.brewService.GetSystemProxy()
+}
+
+// SetSystemProxyEnabled persists and applies the system-proxy toggle
+func (a *App) SetSystemProxyEnabled(enabled bool) (*SystemProxyStatus, error) {
+	return a.brewService.SetSystemProxyEnabled(enabled)
+}

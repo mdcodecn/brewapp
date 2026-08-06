@@ -2057,7 +2057,62 @@ async function loadConfig() {
     renderConfigDiskUsage();
     // Mirror sources
     loadMirrorSources();
+    // System proxy
+    loadSystemProxy();
 }
+
+// ===== System proxy (系统代理) =====
+async function loadSystemProxy() {
+    try {
+        const status = await Service.GetSystemProxy();
+        renderSystemProxy(status);
+    } catch (err) {
+        const el = document.getElementById('proxy-detect');
+        if (el) el.textContent = '获取系统代理信息失败';
+    }
+}
+
+function renderSystemProxy(status) {
+    const cb = document.getElementById('system-proxy-toggle');
+    if (cb) cb.checked = !!(status && status.enabled);
+    const el = document.getElementById('proxy-detect');
+    if (!el) return;
+    if (!status) {
+        el.textContent = '未检测到系统代理';
+        el.className = 'proxy-detect';
+        return;
+    }
+    const parts = [];
+    if (status.http) parts.push('HTTP ' + status.http);
+    if (status.https) parts.push('HTTPS ' + status.https);
+    if (status.socks) parts.push('SOCKS ' + status.socks);
+    if (parts.length === 0) {
+        el.textContent = '未检测到系统代理（可在 macOS 系统设置 → 网络 → 代理 中配置）';
+        el.className = 'proxy-detect';
+    } else {
+        el.textContent = '检测到：' + parts.join(' · ');
+        el.className = 'proxy-detect proxy-detect-ok';
+    }
+}
+
+window.toggleSystemProxy = async function() {
+    const cb = document.getElementById('system-proxy-toggle');
+    if (!cb) return;
+    const on = cb.checked;
+    try {
+        const status = await Service.SetSystemProxyEnabled(on);
+        renderSystemProxy(status);
+        const hasProxy = status && (status.http || status.https || status.socks);
+        if (on && !hasProxy) {
+            showToast('已开启，但未检测到系统代理，暂不会生效', 'info');
+        } else {
+            showToast(on ? '已开启系统代理' : '已关闭系统代理', 'success');
+        }
+    } catch (err) {
+        cb.checked = !on;
+        showToast('设置失败: ' + err.message, 'error');
+    }
+};
 
 // ===== Mirror sources (换镜像源) =====
 let mirrorSources = [];
@@ -2110,6 +2165,7 @@ async function testMirrorSpeeds() {
     document.querySelectorAll('.mirror-card').forEach(card => {
         const box = card.querySelector('.mirror-speed');
         if (box) {
+            box.style.display = '';
             box.className = 'mirror-speed mirror-speed-testing';
             box.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:2px;"></span> 测速中...';
         }
@@ -2141,10 +2197,12 @@ function applyMirrorSpeedResults(results) {
         const box = card.querySelector('.mirror-speed');
         if (!box) return;
         if (r.success) {
+            box.style.display = '';
             box.className = 'mirror-speed mirror-speed-ok';
             box.textContent = mirrorSpeedDisplay(r) + (r.id === fastestId ? ' · 最快' : '');
             box.title = '测速文件: ' + r.url;
         } else {
+            box.style.display = '';
             box.className = 'mirror-speed mirror-speed-err';
             box.textContent = '测速失败';
             box.title = r.error || '无法连接';
@@ -2173,7 +2231,7 @@ function renderMirrorSources() {
             +   '<div class="mirror-name">' + escapeHtml(src.name) + (active ? '<span class="mirror-current-tag">当前</span>' : '') + '</div>'
             +   '<div class="mirror-desc">' + escapeHtml(src.description) + '</div>'
             +   '<div class="mirror-url">' + escapeHtml(src.url) + '</div>'
-            +   '<div class="mirror-speed">未测速</div>'
+            +   '<div class="mirror-speed" style="display:none"></div>'
             + '</div>'
             + '<div class="mirror-check">' + (active ? MIRROR_CHECK_SVG : '') + '</div>'
         + '</div>';

@@ -18,6 +18,8 @@ export function GetOutdatedWithVersion():Promise<Array<main.BrewPackage>>;
 
 export function GetPackageDetail(arg1:string,arg2:string):Promise<main.PackageDetail>;
 
+export function GetSystemProxy():Promise<main.SystemProxyStatus>;
+
 export function GetUses(arg1:string):Promise<Array<string>>;
 
 export function GetVulns():Promise<string>;
@@ -29,6 +31,8 @@ export function RemoveTap(arg1:string):Promise<void>;
 export function ResetBrewDetection():Promise<void>;
 
 export function SetMirrorSource(arg1:string):Promise<void>;
+
+export function SetSystemProxyEnabled(arg1:boolean):Promise<main.SystemProxyStatus>;
 
 export function TestMirrorSpeeds():Promise<Array<main.MirrorSpeedResult>>;
 

@@ -288,6 +288,24 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class SystemProxyStatus {
+	    enabled: boolean;
+	    http?: string;
+	    https?: string;
+	    socks?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SystemProxyStatus(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.enabled = source["enabled"];
+	        this.http = source["http"];
+	        this.https = source["https"];
+	        this.socks = source["socks"];
+	    }
+	}
 	export class TrustInfo {
 	    supported: boolean;
 	    taps: string[];

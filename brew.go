@@ -89,6 +89,8 @@ func debugLog(format string, args ...interface{}) {
 func (s *Service) setContext(ctx context.Context) {
 	s.ctx = ctx
 	debugLog("setContext called, ctx=%v", ctx != nil)
+	// Route brew subprocesses through the system proxy if the user enabled it.
+	applyPersistedSystemProxy()
 }
 
 // brewPathOnce / brewPath cache the resolved Homebrew location so we only pay

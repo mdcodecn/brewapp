@@ -1937,6 +1937,57 @@ body {
   border-radius: 10px;
 }
 
+/* System proxy row */
+.proxy-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+}
+
+.proxy-row:hover {
+  border-color: var(--accent-dim);
+}
+
+.proxy-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.proxy-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.proxy-desc {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.proxy-desc code {
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+  font-size: 10px;
+  background: var(--bg-tertiary);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.proxy-detect {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.proxy-detect-ok {
+  color: #34c759;
+}
+
 .config-layout {
   display: grid;
   grid-template-columns: 1.35fr 1fr;

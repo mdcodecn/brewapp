@@ -26,6 +26,8 @@ export function GetOutdatedWithVersion():Promise<Array<main.BrewPackage>>;
 
 export function GetPackageDetail(arg1:string,arg2:string):Promise<main.PackageDetail>;
 
+export function GetSystemProxy():Promise<main.SystemProxyStatus>;
+
 export function GetTaps():Promise<Array<string>>;
 
 export function GetTrustInfo():Promise<main.TrustInfo>;
@@ -61,6 +63,8 @@ export function RunService(arg1:string):Promise<void>;
 export function Search(arg1:string):Promise<main.SearchResponse>;
 
 export function SetMirrorSource(arg1:string):Promise<void>;
+
+export function SetSystemProxyEnabled(arg1:boolean):Promise<main.SystemProxyStatus>;
 
 export function StartService(arg1:string):Promise<void>;
 

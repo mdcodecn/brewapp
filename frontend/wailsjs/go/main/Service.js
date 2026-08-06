@@ -50,6 +50,10 @@ export function GetPackageDetail(arg1, arg2) {
   return window['go']['main']['Service']['GetPackageDetail'](arg1, arg2);
 }
 
+export function GetSystemProxy() {
+  return window['go']['main']['Service']['GetSystemProxy']();
+}
+
 export function GetTaps() {
   return window['go']['main']['Service']['GetTaps']();
 }
@@ -120,6 +124,10 @@ export function Search(arg1) {
 
 export function SetMirrorSource(arg1) {
   return window['go']['main']['Service']['SetMirrorSource'](arg1);
+}
+
+export function SetSystemProxyEnabled(arg1) {
+  return window['go']['main']['Service']['SetSystemProxyEnabled'](arg1);
 }
 
 export function StartService(arg1) {
