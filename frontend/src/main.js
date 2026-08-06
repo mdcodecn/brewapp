@@ -2062,11 +2062,27 @@ async function loadConfig() {
 }
 
 // ===== System proxy (系统代理) =====
+// 状态小字：未开启时显示用途说明，开启后显示实际生效情况
+function applyProxyDesc(status) {
+    const desc = document.getElementById('proxy-desc');
+    if (!desc) return;
+    const hasProxy = status && (status.http || status.https || status.socks);
+    const addr = hasProxy || '';
+    if (status && status.enabled) {
+        desc.textContent = hasProxy ? '已启用，走 ' + addr : '已开启，未检测到代理';
+        desc.className = 'proxy-cell-desc ' + (hasProxy ? 'st-on' : 'st-warn');
+    } else {
+        desc.textContent = '应用内 brew 下载走系统代理';
+        desc.className = 'proxy-cell-desc';
+    }
+}
+
 async function loadSystemProxy() {
     try {
         const status = await Service.GetSystemProxy();
         const cb = document.getElementById('system-proxy-toggle');
         if (cb) cb.checked = !!(status && status.enabled);
+        applyProxyDesc(status);
     } catch (err) {
         // silent: toggle stays off on failure
     }
@@ -2078,6 +2094,7 @@ window.toggleSystemProxy = async function() {
     const on = cb.checked;
     try {
         const status = await Service.SetSystemProxyEnabled(on);
+        applyProxyDesc(status);
         const hasProxy = status && (status.http || status.https || status.socks);
         if (on && !hasProxy) {
             showToast('已开启（未检测到代理，暂不生效）', 'info');

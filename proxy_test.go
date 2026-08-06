@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -84,6 +85,33 @@ func TestApplyProxyEnv(t *testing.T) {
 	applyProxyEnv(SystemProxyStatus{Enabled: true, HTTP: "proxy.local:8080"})
 	if v := os.Getenv("ALL_PROXY"); v != "http://proxy.local:8080" {
 		t.Errorf("ALL_PROXY = %q, want http fallback", v)
+	}
+}
+
+// TestProxyConfigDefaultEnabled verifies 系统代理默认开启: without any
+// persisted config the toggle reads as enabled, and a corrupt file also
+// falls back to enabled.
+func TestProxyConfigDefaultEnabled(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	if !loadAppConfig().SystemProxyEnabled {
+		t.Error("proxy should default to enabled when no config file exists")
+	}
+
+	// Corrupt file → still defaults to enabled
+	if err := os.WriteFile(filepath.Join(dir, "brew-manager", "config.json"), []byte("{oops"), 0o644); err != nil {
+		t.Fatalf("write corrupt config: %v", err)
+	}
+	if !loadAppConfig().SystemProxyEnabled {
+		t.Error("proxy should default to enabled on corrupt config")
+	}
+
+	// Explicit false in the file still wins
+	if err := os.WriteFile(filepath.Join(dir, "brew-manager", "config.json"), []byte(`{"system_proxy_enabled": false}`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	if loadAppConfig().SystemProxyEnabled {
+		t.Error("explicit false should override the default")
 	}
 }
 

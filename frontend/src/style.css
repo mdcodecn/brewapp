@@ -1945,20 +1945,122 @@ body {
   gap: 12px;
 }
 
-/* System proxy toggle with label in the heading actions */
-.proxy-toggle-label {
-  display: inline-flex;
+/* ===== System proxy (系统代理) — 单行开关 ===== */
+.proxy-cell {
+  display: flex;
   align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-radius: 14px;
+  margin-bottom: 18px;
 }
 
-.proxy-toggle-text {
-  font-size: 12px;
+.proxy-cell-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-dim);
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.proxy-cell-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.proxy-cell-title {
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.proxy-cell-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.proxy-cell-desc.st-on {
+  color: var(--success);
+}
+
+.proxy-cell-desc.st-warn {
+  color: var(--warning);
+}
+
+/* iOS-style switch: track + sliding thumb + check */
+.proxy-switch {
+  position: relative;
+  flex-shrink: 0;
+  display: block;
+}
+
+.proxy-switch input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.proxy-switch-track {
+  position: relative;
+  display: block;
+  width: 44px;
+  height: 26px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  transition: background 0.25s ease;
+}
+
+.proxy-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35), inset 0 0 0 0.5px rgba(0, 0, 0, 0.06) !important;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #fff;
+}
+
+.proxy-switch-check {
+  color: #fff;
+  opacity: 0;
+  transform: scale(0.4);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.proxy-switch input:checked + .proxy-switch-track {
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--success-dim) !important;
+}
+
+.proxy-switch input:checked + .proxy-switch-track .proxy-switch-thumb {
+  transform: translateX(18px);
+}
+
+.proxy-switch input:checked + .proxy-switch-track .proxy-switch-check {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .config-layout {

@@ -26,7 +26,12 @@ type appConfig struct {
 
 // proxyConfigPath returns the app config file location
 // (~/Library/Application Support/brew-manager/config.json on macOS).
+// BREW_MANAGER_CONFIG_DIR can override the base directory (used by tests,
+// since os.UserConfigDir ignores XDG_CONFIG_HOME on darwin).
 func proxyConfigPath() string {
+	if dir := os.Getenv("BREW_MANAGER_CONFIG_DIR"); dir != "" {
+		return filepath.Join(dir, "brew-manager", "config.json")
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		dir = os.Getenv("HOME")
@@ -34,14 +39,19 @@ func proxyConfigPath() string {
 	return filepath.Join(dir, "brew-manager", "config.json")
 }
 
-// loadAppConfig reads the persisted app config (missing file = defaults).
+// loadAppConfig reads the persisted app config. The config file is only
+// written once the user toggles the proxy, so a missing / unreadable /
+// corrupt file means the user never made a choice — 系统代理默认开启.
+// An explicit "system_proxy_enabled": false in the file still wins.
 func loadAppConfig() appConfig {
-	var cfg appConfig
+	cfg := appConfig{SystemProxyEnabled: true} // 默认开启
 	data, err := os.ReadFile(proxyConfigPath())
 	if err != nil {
 		return cfg
 	}
-	_ = json.Unmarshal(data, &cfg)
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return cfg
+	}
 	return cfg
 }
 
