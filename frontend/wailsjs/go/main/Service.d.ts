@@ -20,6 +20,8 @@ export function GetDiskUsage():Promise<Record<string, string>>;
 
 export function GetLeaves():Promise<Array<string>>;
 
+export function GetMirrorSources():Promise<main.MirrorSourcesResponse>;
+
 export function GetMissing():Promise<Array<string>>;
 
 export function GetOutdated():Promise<Array<main.BrewPackage>>;
@@ -65,6 +67,8 @@ export function RestartService(arg1:string):Promise<void>;
 export function RunService(arg1:string):Promise<void>;
 
 export function Search(arg1:string):Promise<main.SearchResponse>;
+
+export function SetMirrorSource(arg1:string):Promise<void>;
 
 export function StartService(arg1:string):Promise<void>;
 

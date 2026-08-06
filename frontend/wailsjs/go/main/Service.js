@@ -38,6 +38,10 @@ export function GetLeaves() {
   return window['go']['main']['Service']['GetLeaves']();
 }
 
+export function GetMirrorSources() {
+  return window['go']['main']['Service']['GetMirrorSources']();
+}
+
 export function GetMissing() {
   return window['go']['main']['Service']['GetMissing']();
 }
@@ -128,6 +132,10 @@ export function RunService(arg1) {
 
 export function Search(arg1) {
   return window['go']['main']['Service']['Search'](arg1);
+}
+
+export function SetMirrorSource(arg1) {
+  return window['go']['main']['Service']['SetMirrorSource'](arg1);
 }
 
 export function StartService(arg1) {

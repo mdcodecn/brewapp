@@ -26,6 +26,10 @@ export function GetLeaves() {
   return window['go']['main']['App']['GetLeaves']();
 }
 
+export function GetMirrorSources() {
+  return window['go']['main']['App']['GetMirrorSources']();
+}
+
 export function GetMissing() {
   return window['go']['main']['App']['GetMissing']();
 }
@@ -52,6 +56,10 @@ export function Pin(arg1) {
 
 export function RemoveTap(arg1) {
   return window['go']['main']['App']['RemoveTap'](arg1);
+}
+
+export function SetMirrorSource(arg1) {
+  return window['go']['main']['App']['SetMirrorSource'](arg1);
 }
 
 export function Unlink(arg1) {

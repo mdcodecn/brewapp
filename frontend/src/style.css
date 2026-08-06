@@ -1710,6 +1710,126 @@ body {
 }
 
 /* ===== Config Page ===== */
+/* ===== Mirror sources (换镜像源) ===== */
+.mirror-custom-note {
+  margin-bottom: 12px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--warning-dim);
+  color: var(--warning);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.mirror-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+  gap: 12px;
+}
+
+.mirror-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-width: 0;
+}
+
+.mirror-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-dim);
+  background: var(--bg-tertiary);
+}
+
+.mirror-card.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.mirror-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.2px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.mirror-badge-official { background: linear-gradient(135deg, #24292e, #57606a); }
+.mirror-badge-tuna     { background: linear-gradient(135deg, #6f42c1, #a371f7); }
+.mirror-badge-aliyun   { background: linear-gradient(135deg, #ff6a00, #ff9a3d); }
+.mirror-badge-ustc     { background: linear-gradient(135deg, #00703c, #00a651); }
+.mirror-badge-bfsu     { background: linear-gradient(135deg, #c8102e, #e64563); }
+.mirror-badge-custom   { background: var(--text-muted); }
+
+.mirror-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.mirror-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mirror-current-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.mirror-desc {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mirror-url {
+  margin-top: 2px;
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mirror-check {
+  display: flex;
+  align-items: center;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.mirror-error {
+  padding: 16px;
+  font-size: 12px;
+  color: var(--danger, #ff3b30);
+  background: var(--bg-primary);
+  border-radius: 10px;
+}
+
 .config-layout {
   display: grid;
   grid-template-columns: 1.35fr 1fr;

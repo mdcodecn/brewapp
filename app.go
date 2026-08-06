@@ -114,3 +114,13 @@ func (a *App) Unlink(name string) error {
 func (a *App) GetVulns() (string, error) {
 	return a.brewService.GetVulns()
 }
+
+// GetMirrorSources returns the Homebrew mirror presets and the current one
+func (a *App) GetMirrorSources() (*MirrorSourcesResponse, error) {
+	return a.brewService.GetMirrorSources()
+}
+
+// SetMirrorSource switches the Homebrew download mirror source
+func (a *App) SetMirrorSource(id string) error {
+	return a.brewService.SetMirrorSource(id)
+}

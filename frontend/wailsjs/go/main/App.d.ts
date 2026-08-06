@@ -14,6 +14,8 @@ export function GetDependencies(arg1:string):Promise<Array<string>>;
 
 export function GetLeaves():Promise<Array<string>>;
 
+export function GetMirrorSources():Promise<main.MirrorSourcesResponse>;
+
 export function GetMissing():Promise<Array<string>>;
 
 export function GetOutdatedWithVersion():Promise<Array<main.BrewPackage>>;
@@ -27,6 +29,8 @@ export function Link(arg1:string):Promise<void>;
 export function Pin(arg1:string):Promise<void>;
 
 export function RemoveTap(arg1:string):Promise<void>;
+
+export function SetMirrorSource(arg1:string):Promise<void>;
 
 export function Unlink(arg1:string):Promise<void>;
 

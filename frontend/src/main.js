@@ -1792,7 +1792,87 @@ window.runDoctorQuick = function() {
 async function loadConfig() {
     // Disk usage
     renderConfigDiskUsage();
+    // Mirror sources
+    loadMirrorSources();
 }
+
+// ===== Mirror sources (换镜像源) =====
+let mirrorSources = [];
+let currentMirror = 'official';
+
+async function loadMirrorSources() {
+    const list = document.getElementById('mirror-list');
+    try {
+        const res = await App.GetMirrorSources();
+        mirrorSources = res.sources || [];
+        currentMirror = res.current || 'official';
+        renderMirrorSources();
+    } catch (err) {
+        if (list) list.innerHTML = '<div class="mirror-error">加载镜像源失败：' + escapeHtml(err.message) + '</div>';
+    }
+}
+
+// Badge initials + accent color per source
+const MIRROR_BADGE = {
+    official: { text: 'GH', cls: 'mirror-badge-official' },
+    tuna:     { text: 'TUNA', cls: 'mirror-badge-tuna' },
+    aliyun:   { text: 'ALI', cls: 'mirror-badge-aliyun' },
+    ustc:     { text: 'USTC', cls: 'mirror-badge-ustc' },
+    bfsu:     { text: 'BFSU', cls: 'mirror-badge-bfsu' },
+    custom:   { text: '自定义', cls: 'mirror-badge-custom' },
+};
+
+const MIRROR_CHECK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+function renderMirrorSources() {
+    const list = document.getElementById('mirror-list');
+    if (!list) return;
+
+    const customNote = document.getElementById('mirror-custom-note');
+    if (customNote) customNote.style.display = currentMirror === 'custom' ? '' : 'none';
+
+    if (!mirrorSources.length) {
+        list.innerHTML = '<div class="mirror-error">暂无可用镜像源</div>';
+        return;
+    }
+
+    list.innerHTML = mirrorSources.map(src => {
+        const active = src.id === currentMirror;
+        const badge = MIRROR_BADGE[src.id] || { text: '镜像', cls: 'mirror-badge-custom' };
+        return '<div class="mirror-card' + (active ? ' active' : '') + '" onclick="switchMirror(\'' + src.id + '\')" title="' + (active ? '当前使用中' : '点击切换') + '">'
+            + '<div class="mirror-badge ' + badge.cls + '">' + badge.text + '</div>'
+            + '<div class="mirror-info">'
+            +   '<div class="mirror-name">' + escapeHtml(src.name) + (active ? '<span class="mirror-current-tag">当前</span>' : '') + '</div>'
+            +   '<div class="mirror-desc">' + escapeHtml(src.description) + '</div>'
+            +   '<div class="mirror-url">' + escapeHtml(src.url) + '</div>'
+            + '</div>'
+            + '<div class="mirror-check">' + (active ? MIRROR_CHECK_SVG : '') + '</div>'
+        + '</div>';
+    }).join('');
+}
+
+// Exposed for inline onclick handlers
+window.switchMirror = function(id) {
+    const src = mirrorSources.find(s => s.id === id);
+    if (!src) return;
+    if (id === currentMirror) return; // already active
+
+    showModal('切换镜像源',
+        '<p style="margin:0 0 12px;line-height:1.7;font-size:13px;color:var(--text-secondary)">确定要将 Homebrew 镜像源切换为 <b style="color:var(--text-primary)">' + escapeHtml(src.name) + '</b> 吗？</p>'
+        + '<p style="margin:0;line-height:1.7;font-size:12px;color:var(--text-muted)">切换会修改 shell 配置文件（~/.zshrc）并立即对当前应用生效；下载异常时可随时切回官方源。原配置文件会备份为 .bak。</p>',
+        async () => {
+            try {
+                await App.SetMirrorSource(id);
+                currentMirror = id;
+                renderMirrorSources();
+                showToast('已切换到「' + src.name + '」', 'success');
+            } catch (err) {
+                showToast('切换失败: ' + err.message, 'error');
+                loadMirrorSources(); // restore highlight on failure
+            }
+        }
+    );
+};
 
 function renderConfigDiskUsage() {
     const grid = document.getElementById('config-disk-usage');
