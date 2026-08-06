@@ -605,12 +605,12 @@ function renderOutdatedPreview(outdated, loaded) {
         return;
     }
 
-    if (countEl) countEl.textContent = outdated.length;
-
     // Apply leaves filter to the preview as well
     const visible = leavesOnly && cachedLeaves
         ? outdated.filter(p => p.type !== 'formula' || cachedLeaves.includes(p.name))
         : outdated;
+
+    if (countEl) countEl.textContent = visible.length;
 
     if (visible.length === 0) {
         container.innerHTML = `
@@ -622,7 +622,6 @@ function renderOutdatedPreview(outdated, loaded) {
     }
 
     const top = visible.slice(0, 5);
-    const remainder = visible.length - 5;
     container.innerHTML = top.map(p => {
         const icon = p.type === 'cask' ? CASK_ICON : FORMULA_ICON;
         const iconCls = p.type === 'cask' ? 'pkg-icon-cask' : 'pkg-icon-formula';
@@ -640,8 +639,7 @@ function renderOutdatedPreview(outdated, loaded) {
             ${verBox}
             <button class="btn btn-update-action btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
         </div>`;
-    }).join('')
-    + (remainder > 0 ? `<div class="outdated-more">还有 ${remainder} 个</div>` : '');
+    }).join('');
 }
 
 // ===== Installed =====
@@ -715,7 +713,6 @@ async function refreshOutdated() {
 function renderInstalled(type, packages) {
     const searchInputId = type === 'cask' ? 'installed-cask-search' : 'installed-formula-search';
     const containerId = type === 'cask' ? 'cask-list' : 'formula-list';
-    const countId = type === 'cask' ? 'cask-page-count' : 'formula-page-count';
     const isCask = type === 'cask';
     const search = document.getElementById(searchInputId).value.toLowerCase();
     const filtered = packages.filter(p => {
@@ -725,10 +722,6 @@ function renderInstalled(type, packages) {
         return p.name.toLowerCase().includes(search) ||
                (p.description && p.description.toLowerCase().includes(search));
     });
-
-    // Live count pill next to the heading
-    const countEl = document.getElementById(countId);
-    if (countEl) countEl.textContent = filtered.length + ' 个';
 
     const container = document.getElementById(containerId);
     if (filtered.length === 0) {
@@ -840,7 +833,6 @@ let searchTimeout = null;
 
 function renderSearchResults(results, warnings) {
     const container = document.getElementById('search-results');
-    const countEl = document.getElementById('search-result-count');
     if (!container) return;
 
     // Show non-fatal warnings (e.g. untrusted tap) above the results
@@ -850,15 +842,7 @@ function renderSearchResults(results, warnings) {
 
     if (!results || results.length === 0) {
         container.innerHTML = warnHTML || emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试，如 git、google-chrome');
-        if (countEl) countEl.style.display = 'none';
         return;
-    }
-
-    if (countEl) {
-        countEl.style.display = 'inline-flex';
-        countEl.textContent = results.length > 50
-            ? `共 ${results.length} 个结果，显示前 50`
-            : `${results.length} 个结果`;
     }
 
     container.innerHTML = warnHTML + results.slice(0, 50).map(r => `
@@ -886,8 +870,6 @@ async function doSearch(query) {
     const container = document.getElementById('search-results');
     if (!container) return;
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 搜索中...</div>';
-    const countEl = document.getElementById('search-result-count');
-    if (countEl) countEl.style.display = 'none';
 
     try {
         const resp = await Service.Search(query);
@@ -904,8 +886,6 @@ window.debounceSearch = function() {
     const query = input.value.trim();
     if (!query) {
         document.getElementById('search-results').innerHTML = '';
-        const countEl = document.getElementById('search-result-count');
-        if (countEl) countEl.style.display = 'none';
         return;
     }
     searchTimeout = setTimeout(() => doSearch(query), 300);
@@ -988,9 +968,7 @@ function renderOutdated(outdated) {
                (p.description && p.description.toLowerCase().includes(search));
     });
 
-    // Live count pill + enable/disable bulk upgrade
-    const countEl = document.getElementById('outdated-page-count');
-    if (countEl) countEl.textContent = filtered.length + ' 个';
+    // Enable/disable bulk upgrade
     const upgradeAllBtn = document.getElementById('upgrade-all-btn');
     if (upgradeAllBtn) upgradeAllBtn.disabled = outdated.length === 0;
 
@@ -1276,9 +1254,6 @@ function renderTaps(taps, trustInfo) {
     // Update sidebar badge
     updateTapBadge(taps.length);
 
-    const pageCount = document.getElementById('tap-page-count');
-    if (pageCount) pageCount.textContent = taps.length + ' 个';
-
     const trustSupported = !!(trustInfo && trustInfo.supported);
     const trustedSet = new Set((trustInfo && trustInfo.taps) || []);
 
@@ -1466,9 +1441,6 @@ function renderServices(services) {
                (sv.user || '').toLowerCase().includes(search) ||
                (sv.file || '').toLowerCase().includes(search);
     });
-
-    const countEl = document.getElementById('service-page-count');
-    if (countEl) countEl.textContent = filtered.length + ' 个';
 
     const container = document.getElementById('services-list');
     if (!container) return;

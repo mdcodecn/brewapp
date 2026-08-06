@@ -1010,14 +1010,6 @@ body {
   flex: 1;
 }
 
-.outdated-more {
-  text-align: center;
-  padding: 8px 0 2px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
 /* ===== Quick Actions ===== */
 .quick-actions {
   display: grid;

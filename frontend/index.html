@@ -248,7 +248,6 @@
                             <h1>搜索</h1>
                             <p class="page-subtitle">在 Homebrew 仓库中查找并安装软件包</p>
                         </div>
-                        <span class="count-badge" id="search-result-count" style="display:none;"></span>
                     </div>
                     <input type="text" id="search-input" class="search-input search-input-lg" placeholder="输入包名，如: git、google-chrome…" autocomplete="off">
                     <div id="search-results" class="results-list"></div>
@@ -263,7 +262,6 @@
                         <p class="page-subtitle">已安装的图形应用（Cask）</p>
                     </div>
                     <div class="page-heading-actions">
-                        <span class="count-badge count-badge-blue" id="cask-page-count">0 个</span>
                         <button class="btn btn-secondary btn-refresh" id="installed-cask-refresh" onclick="refreshInstalled('cask')">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -287,7 +285,6 @@
                         <p class="page-subtitle">已安装的命令行（Formula）</p>
                     </div>
                     <div class="page-heading-actions">
-                        <span class="count-badge count-badge-green" id="formula-page-count">0 个</span>
                         <button class="btn btn-secondary btn-refresh" id="installed-formula-refresh" onclick="refreshInstalled('formula')">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -318,7 +315,6 @@
                         <p class="page-subtitle">有可用新版本的软件包</p>
                     </div>
                     <div class="page-heading-actions">
-                        <span class="count-badge count-badge-orange" id="outdated-page-count">0 个</span>
                         <button class="btn btn-secondary btn-refresh" id="outdated-refresh" onclick="refreshOutdated()">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -348,7 +344,6 @@
                         <p class="page-subtitle">管理 Homebrew 后台服务（brew services）</p>
                     </div>
                     <div class="page-heading-actions">
-                        <span class="count-badge count-badge-green" id="service-page-count">0 个</span>
                         <button class="btn btn-secondary btn-refresh" id="services-refresh" onclick="refreshServices()">
                             <svg class="icon-refresh" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
@@ -371,7 +366,6 @@
                         <h1>仓库</h1>
                         <p class="page-subtitle">管理 Homebrew 软件源</p>
                     </div>
-                    <span class="count-badge" id="tap-page-count">0 个</span>
                 </div>
                 <div class="settings-section">
                     <p class="tap-hint">Homebrew 6+ 中，第三方仓库默认不被信任，点击「信任」后才能搜索和安装其中的包（如 cc-switch）。</p>
