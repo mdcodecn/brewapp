@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -239,6 +241,153 @@ func (s *Service) runBrew(args ...string) (string, error) {
 		return "", fmt.Errorf("brew %s: %s (%w)", strings.Join(args, " "), string(output), err)
 	}
 	return string(output), nil
+}
+
+// ===== Streaming brew execution (live progress to the UI) =====
+
+// brew event kinds streamed to the frontend under "brew:progress".
+const (
+	brewEventStart   = "start"   // command header line
+	brewEventLine    = "line"    // a normal output line
+	brewEventRefresh = "refresh" // \r progress-bar update: replace the last line
+	brewEventPhase   = "phase"   // section header (config import between packages)
+	brewEventDone    = "done"    // command finished
+)
+
+// brewProgressEvent is the JSON payload of a "brew:progress" event.
+type brewProgressEvent struct {
+	Op    string `json:"op"`
+	Kind  string `json:"kind"`
+	Text  string `json:"text,omitempty"`
+	Ok    bool   `json:"ok,omitempty"`
+	Error string `json:"error,omitempty"`
+}
+
+// emitBrewEvent pushes a progress event to the frontend. No-op when the
+// runtime context is not ready (e.g. during unit tests).
+func (s *Service) emitBrewEvent(op, kind, text string, ok bool, errMsg string) {
+	if s.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(s.ctx, "brew:progress", brewProgressEvent{
+		Op: op, Kind: kind, Text: text, Ok: ok, Error: errMsg,
+	})
+}
+
+// ansiEscapeRe matches common ANSI escape sequences (colors, cursor moves).
+// brew disables color when piped, but stripping keeps the log clean if a tap
+// or environment forces escape codes through.
+var ansiEscapeRe = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07`)
+
+// splitBrewOutput is a bufio.SplitFunc that breaks on \n and \r (homebrew
+// updates download progress bars with bare \r), keeping the delimiter so the
+// consumer can tell line tokens from progress-refresh tokens.
+func splitBrewOutput(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	for i := 0; i < len(data); i++ {
+		switch data[i] {
+		case '\n':
+			return i + 1, data[:i+1], nil
+		case '\r':
+			// \r\n is a normal line ending; a lone \r is a progress refresh
+			if i+1 < len(data) && data[i+1] == '\n' {
+				return i + 2, data[:i+2], nil
+			}
+			return i + 1, data[:i+1], nil
+		}
+	}
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
+}
+
+// streamCommand runs `brew <args...>` and streams stdout+stderr line-by-line
+// to the frontend as "brew:progress" events tagged with op. It returns the
+// captured output (delimiter-trimmed) and the process error.
+func (s *Service) streamCommand(op string, args ...string) (string, error) {
+	cmd := exec.Command(brewExecutable(), args...)
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", fmt.Errorf("create stdout pipe: %w", err)
+	}
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return "", fmt.Errorf("create stderr pipe: %w", err)
+	}
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+
+	var (
+		mu  sync.Mutex
+		out strings.Builder
+		wg  sync.WaitGroup
+	)
+
+	emit := func(kind, text string) {
+		s.emitBrewEvent(op, kind, text, false, "")
+		mu.Lock()
+		out.WriteString(text)
+		out.WriteByte('\n')
+		mu.Unlock()
+	}
+
+	scanPipe := func(r io.Reader) {
+		defer wg.Done()
+		sc := bufio.NewScanner(r)
+		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		sc.Split(splitBrewOutput)
+		for sc.Scan() {
+			raw := ansiEscapeRe.ReplaceAllString(sc.Text(), "")
+			var kind, text string
+			if strings.HasSuffix(raw, "\r") {
+				kind, text = brewEventRefresh, strings.TrimRight(raw, "\r")
+			} else {
+				kind, text = brewEventLine, strings.TrimRight(raw, "\r\n")
+			}
+			if text == "" {
+				continue
+			}
+			emit(kind, text)
+		}
+	}
+
+	wg.Add(2)
+	go scanPipe(stdout)
+	go scanPipe(stderr)
+	wg.Wait()
+
+	if err := cmd.Wait(); err != nil {
+		return out.String(), err
+	}
+	return out.String(), nil
+}
+
+// runBrewStreaming runs a brew command under a frontend-streamed progress log.
+// It emits a start marker before and a done marker after the output.
+func (s *Service) runBrewStreaming(op string, args ...string) (string, error) {
+	s.emitBrewEvent(op, brewEventStart, "brew "+strings.Join(args, " "), false, "")
+	output, err := s.streamCommand(op, args...)
+	s.emitBrewEvent(op, brewEventDone, "", err == nil, errString(err))
+	return output, err
+}
+
+// runBrewStreamingPhase is runBrewStreaming with a leading phase header
+// instead of the command-start marker (used by config import between packages).
+func (s *Service) runBrewStreamingPhase(op, phase string, args ...string) (string, error) {
+	s.emitBrewEvent(op, brewEventPhase, phase, false, "")
+	output, err := s.streamCommand(op, args...)
+	s.emitBrewEvent(op, brewEventDone, "", err == nil, errString(err))
+	return output, err
+}
+
+// errString renders an error for event payloads ("" when nil).
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // GetVersion returns the Homebrew version
@@ -679,55 +828,57 @@ func (s *Service) searchCasks(query string, installedSet map[string]bool) ([]Bre
 	return results, nil
 }
 
-// Install installs a package
+// Install installs a package, streaming live progress to the UI
 func (s *Service) Install(name, pkgType string) error {
 	args := []string{"install"}
 	if pkgType == "cask" {
 		args = append(args, "--cask")
 	}
 	args = append(args, name)
-	_, err := s.runBrew(args...)
+	_, err := s.runBrewStreaming("install:"+name, args...)
 	if err != nil {
 		return fmt.Errorf("failed to install %s: %w", name, err)
 	}
 	return nil
 }
 
-// Uninstall uninstalls a package
+// Uninstall uninstalls a package, streaming live progress to the UI
 func (s *Service) Uninstall(name, pkgType string) error {
 	args := []string{"uninstall"}
 	if pkgType == "cask" {
 		args = append(args, "--cask")
 	}
 	args = append(args, name)
-	_, err := s.runBrew(args...)
+	_, err := s.runBrewStreaming("uninstall:"+name, args...)
 	if err != nil {
 		return fmt.Errorf("failed to uninstall %s: %w", name, err)
 	}
 	return nil
 }
 
-// Reinstall reinstalls a package
+// Reinstall reinstalls a package, streaming live progress to the UI
 func (s *Service) Reinstall(name, pkgType string) error {
 	args := []string{"reinstall"}
 	if pkgType == "cask" {
 		args = append(args, "--cask")
 	}
 	args = append(args, name)
-	_, err := s.runBrew(args...)
+	_, err := s.runBrewStreaming("reinstall:"+name, args...)
 	if err != nil {
 		return fmt.Errorf("failed to reinstall %s: %w", name, err)
 	}
 	return nil
 }
 
-// Upgrade upgrades all packages or a specific one
+// Upgrade upgrades all packages or a specific one, streaming live progress
 func (s *Service) Upgrade(name ...string) error {
 	args := []string{"upgrade", "--verbose"}
+	op := "upgrade:all"
 	if len(name) > 0 && name[0] != "" {
+		op = "upgrade:" + name[0]
 		args = append(args, name[0])
 	}
-	_, err := s.runBrew(args...)
+	_, err := s.runBrewStreaming(op, args...)
 	if err != nil {
 		return fmt.Errorf("failed to upgrade: %w", err)
 	}
@@ -851,9 +1002,9 @@ func (s *Service) enrichDescriptions(packages []BrewPackage) {
 	}
 }
 
-// Cleanup removes old versions and cached downloads
+// Cleanup removes old versions and cached downloads, streaming live progress
 func (s *Service) Cleanup() error {
-	_, err := s.runBrew("cleanup", "--prune=all")
+	_, err := s.runBrewStreaming("cleanup", "cleanup", "--prune=all")
 	if err != nil {
 		return fmt.Errorf("failed to cleanup: %w", err)
 	}
@@ -1115,7 +1266,8 @@ func (s *Service) ImportConfig() (*ImportResult, error) {
 			args = append(args, "--cask")
 		}
 		args = append(args, name)
-		if _, err := s.runBrew(args...); err != nil {
+		phase := fmt.Sprintf("正在安装 %s（%d/%d）", name, len(result.Installed)+len(result.Failed)+1, result.Total)
+		if _, err := s.runBrewStreamingPhase("import", phase, args...); err != nil {
 			result.Failed = append(result.Failed, ImportFailure{Name: name, Error: err.Error()})
 			return
 		}
@@ -1252,9 +1404,9 @@ func (s *Service) getDependenciesV1(name string) ([]string, error) {
 	return info[0].DependsOn, nil
 }
 
-// Autoremove removes orphaned dependencies
+// Autoremove removes orphaned dependencies, streaming live progress
 func (s *Service) Autoremove() error {
-	_, err := s.runBrew("autoremove")
+	_, err := s.runBrewStreaming("autoremove", "autoremove")
 	if err != nil {
 		return fmt.Errorf("failed to autoremove: %w", err)
 	}
@@ -1270,9 +1422,9 @@ func (s *Service) AddTap(tap string) error {
 	return nil
 }
 
-// RemoveTap removes a tap
+// RemoveTap removes a tap, streaming live progress
 func (s *Service) RemoveTap(tap string) error {
-	_, err := s.runBrew("untap", tap)
+	_, err := s.runBrewStreaming("untap:"+tap, "untap", tap)
 	if err != nil {
 		return fmt.Errorf("failed to remove tap %s: %w", tap, err)
 	}
@@ -1327,10 +1479,10 @@ func (s *Service) Update() error {
 	return nil
 }
 
-// UpdateWithOutput runs brew update and returns its output, so the UI can
-// show what Homebrew actually did (fetch progress, "Already up-to-date", ...)
+// UpdateWithOutput runs brew update and streams its output live, so the UI
+// can show fetch progress instead of waiting for the whole command to finish.
 func (s *Service) UpdateWithOutput() (string, error) {
-	output, err := s.runBrew("update")
+	output, err := s.runBrewStreaming("update", "update")
 	if err != nil {
 		// Keep the partial output so the modal can show why it failed
 		return output, err
@@ -1338,9 +1490,9 @@ func (s *Service) UpdateWithOutput() (string, error) {
 	return output, nil
 }
 
-// Doctor runs brew doctor and returns output
+// Doctor runs brew doctor and streams its output live
 func (s *Service) Doctor() (string, error) {
-	output, err := s.runBrew("doctor")
+	output, err := s.runBrewStreaming("doctor", "doctor")
 	if err != nil {
 		return output, nil // doctor returns non-zero on warnings
 	}

@@ -70,16 +70,28 @@ function showToast(message, type = 'info') {
 }
 
 // ===== Modal =====
-function showModal(title, body, onConfirm) {
+function showModal(title, body, onConfirm, streamOp) {
     document.getElementById('modal-title').textContent = title;
     document.getElementById('modal-body').innerHTML = body;
     document.getElementById('modal-overlay').style.display = 'flex';
     const confirmBtn = document.getElementById('modal-confirm');
     const newBtn = confirmBtn.cloneNode(true);
     confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
-    newBtn.addEventListener('click', () => {
-        onConfirm();
-        closeModal();
+    newBtn.addEventListener('click', async () => {
+        // Guard against double-clicks while a long operation is running
+        if (newBtn.disabled) return;
+        newBtn.disabled = true;
+        const bodyEl = document.getElementById('modal-body');
+        let stream = null;
+        if (streamOp) stream = attachBrewStream(streamOp, bodyEl);
+        try {
+            await onConfirm();
+        } catch (err) {
+            // Handled by the caller; keep the modal open until it finishes
+        } finally {
+            if (stream) detachBrewStream(stream);
+            closeModal();
+        }
     });
 }
 
@@ -878,7 +890,7 @@ window.reinstallPackage = reinstallPackage;
 async function reinstallPackage(name, type) {
     showModalLoading(
         '确认重装',
-        `确定要重装 <strong>${escapeHtml(name)}</strong> 吗？这将重新下载并安装该包。`,
+        `确定要重装 <strong>${escapeHtml(name)}</strong> 吗？这将重新下载并安装该包。\n\n下方将实时显示安装进度。`,
         async () => {
             try {
                 await Service.Reinstall(name, type);
@@ -894,7 +906,9 @@ async function reinstallPackage(name, type) {
             } catch (err) {
                 throw new Error(`重装失败: ${err.message}`);
             }
-        }
+        },
+        'modal-lg',
+        `reinstall:${name}`
     );
 }
 
@@ -902,7 +916,7 @@ window.uninstallPackage = uninstallPackage;
 async function uninstallPackage(name, type) {
     showModalLoading(
         '确认卸载',
-        `确定要卸载 <strong>${escapeHtml(name)}</strong> 吗？`,
+        `确定要卸载 <strong>${escapeHtml(name)}</strong> 吗？\n\n下方将实时显示卸载进度。`,
         async () => {
             try {
                 await Service.Uninstall(name, type);
@@ -918,7 +932,9 @@ async function uninstallPackage(name, type) {
             } catch (err) {
                 throw new Error(`卸载失败: ${err.message}`);
             }
-        }
+        },
+        'modal-lg',
+        `uninstall:${name}`
     );
 }
 
@@ -989,7 +1005,7 @@ window.installPackage = installPackage;
 async function installPackage(name, type) {
     showModalLoading(
         '确认安装',
-        `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？`,
+        `确定要安装 <strong>${escapeHtml(name)}</strong> 吗？\n\n下方将实时显示安装进度。`,
         async () => {
             try {
                 await Service.Install(name, type);
@@ -1005,7 +1021,9 @@ async function installPackage(name, type) {
             } catch (err) {
                 throw new Error(`安装失败: ${err.message}`);
             }
-        }
+        },
+        'modal-lg',
+        `install:${name}`
     );
 }
 
@@ -1106,46 +1124,44 @@ function renderOutdated(outdated) {
 }
 
 async function upgradePackage(name) {
-    // Find the button for this package (works from the outdated tab or the dashboard preview)
-    const items = document.querySelectorAll('#outdated-list .pkg-item, #outdated-preview .outdated-item');
-    let targetBtn = null;
-    for (const item of items) {
-        const nameEl = item.querySelector('.pkg-name, .outdated-name');
-        if (nameEl && nameEl.textContent === name) {
-            targetBtn = item.querySelector('.btn');
-            break;
-        }
-    }
-    try {
-        setButtonLoading(targetBtn, true, '更新');
-        await Service.Upgrade([name]);
-        showToast(`${name} 更新成功`, 'success');
-        markCacheDirty('outdated');
-        markCacheDirty('dashboard');
-        tabCache.outdated.data = null;
-        tabCache.outdated.timestamp = 0;
-        tabCache.dashboard.data = null;
-        tabCache.dashboard.timestamp = 0;
-        if (currentTab === 'dashboard') {
-            refreshDashboard();
-        } else {
-            loadOutdated();
-        }
-    } catch (err) {
-        showToast('更新失败: ' + err.message, 'error');
-    }
-    setButtonLoading(targetBtn, false, '更新');
+    showModalLoading(
+        '更新包',
+        `正在更新 <strong>${escapeHtml(name)}</strong>，下方将实时显示更新进度。`,
+        async () => {
+            try {
+                await Service.Upgrade([name]);
+                markCacheDirty('outdated');
+                markCacheDirty('dashboard');
+                tabCache.outdated.data = null;
+                tabCache.outdated.timestamp = 0;
+                tabCache.dashboard.data = null;
+                tabCache.dashboard.timestamp = 0;
+                if (currentTab === 'dashboard') {
+                    refreshDashboard();
+                } else {
+                    loadOutdated();
+                }
+                return `${name} 更新成功`;
+            } catch (err) {
+                throw new Error('更新失败: ' + err.message);
+            }
+        },
+        'modal-lg',
+        `upgrade:${name}`
+    );
 }
 
 window.upgradeAll = upgradeAll;
 async function upgradeAll() {
     showModal(
         '全部更新',
-        '确定要更新所有待更新的包吗？这可能需要较长时间。',
+        '确定要更新所有待更新的包吗？这可能需要较长时间，下方将实时显示更新进度。',
         async () => {
             const btn = document.getElementById('upgrade-all-btn');
-            btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span> 更新中...';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> 更新中...';
+            }
             try {
                 await Service.Upgrade([]);
                 showToast('全部更新完成', 'success');
@@ -1159,11 +1175,14 @@ async function upgradeAll() {
             } catch (err) {
                 showToast('更新失败: ' + err.message, 'error');
             }
-            btn.disabled = false;
-            btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
-            </svg> 全部更新`;
-        }
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>
+                </svg> 全部更新`;
+            }
+        },
+        'upgrade:all'
     );
 }
 
@@ -1205,6 +1224,8 @@ window.importConfig = async function() {
         card.classList.add('is-busy');
     }
     setInlineResult('import-config-result', '正在选择备份文件...', true);
+    const logEl = document.getElementById('import-config-log');
+    let stream = logEl ? attachBrewStream('import', logEl) : null;
     try {
         const result = await Service.ImportConfig();
         if (!result) throw new Error('导入失败');
@@ -1238,6 +1259,7 @@ window.importConfig = async function() {
     } catch (err) {
         setInlineResult('import-config-result', '✗ 导入失败：' + err.message, false);
     } finally {
+        if (stream) detachBrewStream(stream);
         if (card) card.classList.remove('is-busy');
     }
 };
@@ -1247,7 +1269,7 @@ async function cleanupBrew() {
     const btn = document.getElementById('cleanup-btn');
     showModalLoading(
         '清理缓存',
-        '确定要清理 Homebrew 缓存和旧版本吗？',
+        '确定要清理 Homebrew 缓存和旧版本吗？\n\n下方将实时显示清理进度。',
         async () => {
             setButtonLoading(btn, true, '清理缓存');
             try {
@@ -1262,7 +1284,9 @@ async function cleanupBrew() {
             } finally {
                 setButtonLoading(btn, false, '清理缓存');
             }
-        }
+        },
+        'modal-lg',
+        'cleanup'
     );
 }
 
@@ -1271,7 +1295,7 @@ async function autoremoveDeps() {
     const btn = document.getElementById('autoremove-btn');
     showModalLoading(
         '清理孤立依赖',
-        '确定要清理不再被任何包依赖的孤立依赖吗？这将释放磁盘空间。',
+        '确定要清理不再被任何包依赖的孤立依赖吗？这将释放磁盘空间。\n\n下方将实时显示清理进度。',
         async () => {
             setButtonLoading(btn, true, '执行清理');
             try {
@@ -1286,7 +1310,9 @@ async function autoremoveDeps() {
             } finally {
                 setButtonLoading(btn, false, '执行清理');
             }
-        }
+        },
+        'modal-lg',
+        'autoremove'
     );
 }
 
@@ -1436,7 +1462,7 @@ window.removeTap = removeTap;
 async function removeTap(tap) {
     showModalLoading(
         '确认移除仓库',
-        `确定要移除仓库 <strong>${escapeHtml(tap)}</strong> 吗？`,
+        `确定要移除仓库 <strong>${escapeHtml(tap)}</strong> 吗？\n\n下方将实时显示移除进度。`,
         async () => {
             try {
                 await Service.RemoveTap(tap);
@@ -1448,7 +1474,9 @@ async function removeTap(tap) {
             } catch (err) {
                 throw new Error(`移除失败: ${err.message}`);
             }
-        }
+        },
+        'modal-lg',
+        `untap:${tap}`
     );
 }
 
@@ -1725,7 +1753,7 @@ function setButtonLoading(btn, loading, originalText) {
 
 // ===== Modal with Loading Indicator =====
 // modalClassName: optional extra class(es) for the modal (e.g. 'modal-lg')
-function showModalLoading(title, bodyHTML, onConfirm, modalClassName) {
+function showModalLoading(title, bodyHTML, onConfirm, modalClassName, streamOp) {
     document.getElementById('modal-title').textContent = title;
     const body = document.getElementById('modal-body');
     body.innerHTML = bodyHTML;
@@ -1748,6 +1776,8 @@ function showModalLoading(title, bodyHTML, onConfirm, modalClassName) {
         }
         newBtn.disabled = true;
         newBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> 执行中...';
+        let stream = null;
+        if (streamOp) stream = attachBrewStream(streamOp, body);
         try {
             const result = await onConfirm(newBtn);
             if (result) {
@@ -1760,6 +1790,7 @@ function showModalLoading(title, bodyHTML, onConfirm, modalClassName) {
         } catch (err) {
             renderModalResult(body, 'error', err.message || '操作失败');
         } finally {
+            if (stream) detachBrewStream(stream);
             newBtn.dataset.done = '1';
             newBtn.disabled = false;
             newBtn.innerHTML = '关闭';
@@ -1775,6 +1806,84 @@ function renderModalResult(body, type, message) {
     div.className = `modal-result modal-result-${type}`;
     div.textContent = (type === 'success' ? '✓ ' : '✗ ') + message;
     body.appendChild(div);
+}
+
+// ===== Live progress log (streamed from Go via "brew:progress" events) =====
+// Only one streaming operation is active at a time (UI serializes them); the
+// listener stays registered and filters on the active operation id.
+let activeBrewStream = null;
+
+function initBrewProgressListener() {
+    if (initBrewProgressListener.done) return;
+    initBrewProgressListener.done = true;
+    Runtime.EventsOn('brew:progress', (e) => {
+        const st = activeBrewStream;
+        if (!st || !e || e.op !== st.op) return;
+        handleBrewProgress(st, e);
+    });
+}
+initBrewProgressListener();
+
+// attachBrewStream shows a terminal-style log pane (created inside logPane
+// host element) and routes brew:progress events for op into it.
+function attachBrewStream(op, host) {
+    // Reuse an existing pane (e.g. the import card's #import-config-log)
+    let pane = host.classList && host.classList.contains('progress-log') ? host : null;
+    if (!pane) pane = host.querySelector('.progress-log');
+    if (!pane) {
+        pane = document.createElement('div');
+        pane.className = 'progress-log';
+        host.appendChild(pane);
+    }
+    pane.hidden = true;
+    pane.innerHTML = '';
+    const pre = document.createElement('pre');
+    pane.appendChild(pre);
+    const st = { op, log: pane, pre, lineCount: 0 };
+    activeBrewStream = st;
+    return st;
+}
+
+function detachBrewStream(st) {
+    if (activeBrewStream === st) activeBrewStream = null;
+}
+
+function handleBrewProgress(st, e) {
+    if (e.kind === 'done' || !e.text) return; // final result handled by the caller
+    st.log.hidden = false;
+    if (e.kind === 'refresh') {
+        replaceLastLogLine(st, e.text);
+        return;
+    }
+    const kind = e.kind === 'phase' ? 'phase' : e.kind === 'start' ? 'cmd' : null;
+    appendLogLine(st, e.text, kind);
+}
+
+function appendLogLine(st, text, kind) {
+    // Cap total lines: drop the oldest to keep the DOM light for long runs
+    if (st.lineCount >= 4000) {
+        const first = st.pre.firstElementChild;
+        if (first) { first.remove(); st.lineCount--; }
+    }
+    const div = document.createElement('div');
+    div.textContent = text;
+    if (kind === 'cmd') div.className = 'log-cmd';
+    else if (kind === 'phase') div.className = 'log-phase';
+    else if (/^(error|fatal)/i.test(text)) div.className = 'log-err';
+    else if (/^warning:/i.test(text)) div.className = 'log-warn';
+    st.pre.appendChild(div);
+    st.lineCount++;
+    st.pre.scrollTop = st.pre.scrollHeight;
+}
+
+function replaceLastLogLine(st, text) {
+    const last = st.pre.lastElementChild;
+    if (last && last.className !== 'log-cmd' && last.className !== 'log-phase') {
+        last.textContent = text;
+        st.pre.scrollTop = st.pre.scrollHeight;
+        return;
+    }
+    appendLogLine(st, text, null);
 }
 
 window.setButtonLoading = setButtonLoading;
@@ -1821,7 +1930,7 @@ document.addEventListener('keydown', (e) => {
 window.runUpdateQuick = function() {
     showModalLoading(
         'Homebrew 更新',
-        '将执行 <code>brew update</code> 更新 Homebrew 本体与各仓库索引，建议定期执行。\n更新可能需要一些时间，请稍候。',
+        '将执行 <code>brew update</code> 更新 Homebrew 本体与各仓库索引，建议定期执行。\n下方将实时显示更新进度。',
         async () => {
             try {
                 const result = await Service.UpdateWithOutput();
@@ -1841,7 +1950,8 @@ window.runUpdateQuick = function() {
                 throw new Error(`更新失败: ${err.message}`);
             }
         },
-        'modal-lg'
+        'modal-lg',
+        'update'
     );
 };
 
@@ -1850,7 +1960,7 @@ window.runUpdateQuick = function() {
 window.runDoctorQuick = function() {
     showModalLoading(
         '系统诊断',
-        '将运行 <code>brew doctor</code> 检查 Homebrew 环境健康状况。\n诊断可能需要一些时间，请稍候。',
+        '将运行 <code>brew doctor</code> 检查 Homebrew 环境健康状况。\n下方将实时显示诊断进度。',
         async () => {
             try {
                 const result = await Service.Doctor();
@@ -1859,7 +1969,8 @@ window.runDoctorQuick = function() {
                 throw new Error(`诊断失败: ${err.message}`);
             }
         },
-        'modal-lg'
+        'modal-lg',
+        'doctor'
     );
 };
 
