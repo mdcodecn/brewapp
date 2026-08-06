@@ -1160,6 +1160,17 @@ func (s *Service) Update() error {
 	return nil
 }
 
+// UpdateWithOutput runs brew update and returns its output, so the UI can
+// show what Homebrew actually did (fetch progress, "Already up-to-date", ...)
+func (s *Service) UpdateWithOutput() (string, error) {
+	output, err := s.runBrew("update")
+	if err != nil {
+		// Keep the partial output so the modal can show why it failed
+		return output, err
+	}
+	return output, nil
+}
+
 // Doctor runs brew doctor and returns output
 func (s *Service) Doctor() (string, error) {
 	output, err := s.runBrew("doctor")

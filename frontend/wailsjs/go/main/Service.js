@@ -162,6 +162,10 @@ export function Update() {
   return window['go']['main']['Service']['Update']();
 }
 
+export function UpdateWithOutput() {
+  return window['go']['main']['Service']['UpdateWithOutput']();
+}
+
 export function Upgrade(arg1) {
   return window['go']['main']['Service']['Upgrade'](arg1);
 }

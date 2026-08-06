@@ -1079,75 +1079,83 @@ async function upgradeAll() {
     );
 }
 
+// Show export/import feedback inside the matching quick-action card
+function setInlineResult(elId, message, ok) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.className = 'config-inline-result show ' + (ok ? 'config-inline-ok' : 'config-inline-err');
+    el.textContent = message;
+}
+
 window.exportConfig = exportConfig;
 async function exportConfig() {
+    const card = document.getElementById('export-config-card');
+    if (card) card.classList.add('is-busy');
+    setInlineResult('export-config-result', '正在打开保存对话框...', true);
     try {
         // Go side opens a native save dialog and writes the file,
         // returning the saved path (empty if the user cancelled)
         const path = await Service.ExportConfig();
         if (!path) {
             showToast('已取消导出', 'info');
+            setInlineResult('export-config-result', '', true);
             return;
         }
         showToast('配置已导出: ' + path, 'success');
-        setConfigResult('✓ 配置已导出至：' + path, true);
+        setInlineResult('export-config-result', '✓ 配置已导出至：' + path, true);
     } catch (err) {
         showToast('导出失败: ' + err.message, 'error');
-        setConfigResult('✗ 导出失败：' + err.message, false);
+        setInlineResult('export-config-result', '✗ 导出失败：' + err.message, false);
+    } finally {
+        if (card) card.classList.remove('is-busy');
     }
 }
 
-// Show export/import feedback inside the config page's 备份与恢复 card
-function setConfigResult(message, ok) {
-    const el = document.getElementById('config-transfer-result');
-    if (!el) return;
-    el.className = 'config-result show ' + (ok ? 'config-result-ok' : 'config-result-err');
-    el.textContent = message;
-}
+// ===== Import config (restore from a backup file, inline — no modal) =====
+window.importConfig = async function() {
+    const card = document.getElementById('import-config-card');
+    if (card) {
+        if (card.classList.contains('is-busy')) return;
+        card.classList.add('is-busy');
+    }
+    setInlineResult('import-config-result', '正在选择备份文件...', true);
+    try {
+        const result = await Service.ImportConfig();
+        if (!result) throw new Error('导入失败');
+        if (result.cancelled) {
+            showToast('已取消导入', 'info');
+            setInlineResult('import-config-result', '', true);
+            return;
+        }
 
-// ===== Import config (restore from a backup file) =====
-window.importConfig = function() {
-    showModalLoading(
-        '导入配置',
-        '将选择一个之前导出的备份文件，并恢复安装其中的全部软件包。\n此操作可能需要较长时间，请耐心等待。',
-        async () => {
-            try {
-                const result = await Service.ImportConfig();
-                if (!result) throw new Error('导入失败');
-                if (result.cancelled) {
-                    return '已取消导入';
-                }
+        const ok = result.failed.length === 0;
+        const lines = [`${result.installed.length}/${result.total} 个软件包安装成功`];
+        if (result.failed.length > 0) {
+            lines.push(`${result.failed.length} 个失败：`);
+            result.failed.forEach(f => lines.push(`  · ${f.name}: ${f.error}`));
+        }
+        const message = lines.join('\n');
 
-                const ok = result.failed.length === 0;
-                const lines = [`${result.installed.length}/${result.total} 个软件包安装成功`];
-                if (result.failed.length > 0) {
-                    lines.push(`${result.failed.length} 个失败：`);
-                    result.failed.forEach(f => lines.push(`  · ${f.name}: ${f.error}`));
-                }
-                const message = lines.join('\n');
+        showToast(ok ? '导入完成' : '导入完成，部分软件包失败', ok ? 'success' : 'error');
+        setInlineResult('import-config-result', (ok ? '✓ ' : '✗ ') + message, ok);
 
-                // Show the same summary inside the config page card
-                setConfigResult(message, ok);
-
-                // Packages changed -> refresh caches
-                markCacheDirty('installed');
-                markCacheDirty('dashboard');
-                markCacheDirty('outdated');
-                tabCache.installed.data = null;
-                tabCache.installed.timestamp = 0;
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                tabCache.outdated.data = null;
-                tabCache.outdated.timestamp = 0;
-                installedPackages = [];
-
-                return { message, type: ok ? 'success' : 'error' };
-            } catch (err) {
-                throw new Error(`导入失败: ${err.message}`);
-            }
-        },
-        'modal-lg'
-    );
+        // Packages changed -> refresh caches
+        markCacheDirty('installed');
+        markCacheDirty('dashboard');
+        markCacheDirty('outdated');
+        tabCache.installed.data = null;
+        tabCache.installed.timestamp = 0;
+        tabCache.dashboard.data = null;
+        tabCache.dashboard.timestamp = 0;
+        tabCache.outdated.data = null;
+        tabCache.outdated.timestamp = 0;
+        installedPackages = [];
+    } catch (err) {
+        showToast('导入失败: ' + err.message, 'error');
+        setInlineResult('import-config-result', '✗ 导入失败：' + err.message, false);
+    } finally {
+        if (card) card.classList.remove('is-busy');
+    }
 };
 
 window.cleanupBrew = cleanupBrew;
@@ -1734,37 +1742,33 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// ===== Update (in config tab) =====
-window.runUpdate = async function() {
-    const btn = document.getElementById('update-btn');
-    const output = document.getElementById('update-output');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> 更新中...';
-    output.textContent = '正在执行 brew update...\n';
-
-    try {
-        await Service.Update();
-        output.textContent += '\n✓ brew update 完成！';
-        showToast('更新完成', 'success');
-        // Invalidate the config cache so the 环境信息 card re-fetches brew config
-        markCacheDirty('config');
-        tabCache.config.data = null;
-        tabCache.config.timestamp = 0;
-        // Refresh dashboard and outdated
-        tabCache.dashboard.data = null;
-        tabCache.dashboard.timestamp = 0;
-        tabCache.outdated.data = null;
-        tabCache.outdated.timestamp = 0;
-    } catch (err) {
-        output.textContent += '\n✗ 更新失败: ' + err.message;
-        showToast('更新失败: ' + err.message, 'error');
-    }
-    btn.disabled = false;
-    btn.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-    </svg> 执行 brew update`;
-}
+// ===== Update (opened as a modal from the config page, consistent with dashboard quick actions) =====
+window.runUpdateQuick = function() {
+    showModalLoading(
+        'Homebrew 更新',
+        '将执行 <code>brew update</code> 更新 Homebrew 本体与各仓库索引，建议定期执行。\n更新可能需要一些时间，请稍候。',
+        async () => {
+            try {
+                const result = await Service.UpdateWithOutput();
+                // Invalidate affected caches after a successful update
+                markCacheDirty('config');
+                markCacheDirty('dashboard');
+                markCacheDirty('outdated');
+                tabCache.config.data = null;
+                tabCache.config.timestamp = 0;
+                tabCache.dashboard.data = null;
+                tabCache.dashboard.timestamp = 0;
+                tabCache.outdated.data = null;
+                tabCache.outdated.timestamp = 0;
+                if (currentTab === 'dashboard') refreshDashboard();
+                return result.trim() || '✓ brew update 完成！';
+            } catch (err) {
+                throw new Error(`更新失败: ${err.message}`);
+            }
+        },
+        'modal-lg'
+    );
+};
 
 // ===== Doctor / Vulnerabilities (opened as modals from the dashboard) =====
 // 系统诊断：直接弹框运行 brew doctor，不再跳转配置页
@@ -1786,20 +1790,6 @@ window.runDoctorQuick = function() {
 
 // ===== Config =====
 async function loadConfig() {
-    // Environment info (cache-aware)
-    if (isCacheValid(tabCache.config)) {
-        document.getElementById('config-output').textContent = tabCache.config.data || '';
-    } else {
-        try {
-            const result = await Service.Config();
-            document.getElementById('config-output').textContent = result || '暂无配置信息';
-            tabCache.config.data = result;
-            tabCache.config.timestamp = Date.now();
-        } catch (err) {
-            document.getElementById('config-output').textContent = '加载配置失败: ' + err.message;
-        }
-    }
-
     // Disk usage
     renderConfigDiskUsage();
 }
@@ -1810,21 +1800,26 @@ function renderConfigDiskUsage() {
     if (!grid) return;
 
     const disk = cachedDiskUsage;
+    grid.innerHTML = diskUsageHTML(disk);
+    if (totalEl) {
+        totalEl.textContent = (disk && Object.keys(disk).length > 0) ? formatBytes(totalDiskUsage(disk)) : '-';
+    }
+}
+
+// Build the disk usage grid (total + per-directory bars)
+function diskUsageHTML(disk) {
     if (!disk || Object.keys(disk).length === 0) {
-        grid.innerHTML = '<div class="disk-empty">暂无磁盘数据</div>';
-        if (totalEl) totalEl.textContent = '-';
-        return;
+        return '<div class="disk-empty">暂无磁盘数据</div>';
     }
 
     const entries = Object.entries(disk);
     const total = entries.reduce((sum, [, v]) => sum + parseSize(v), 0);
-    if (totalEl) totalEl.textContent = formatBytes(total);
 
     const CELLAR_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>';
     const CASK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>';
     const CACHE_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
 
-    grid.innerHTML = entries.map(([label, size]) => {
+    return entries.map(([label, size]) => {
         const bytes = parseSize(size);
         const pct = total > 0 ? Math.round((bytes / total) * 100) : 0;
         const barCls = label.includes('Cellar') ? 'disk-bar-box' : label.includes('Caskroom') ? 'disk-bar-app' : 'disk-bar-trash';

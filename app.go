@@ -60,6 +60,11 @@ func (a *App) Update() error {
 	return a.brewService.Update()
 }
 
+// UpdateWithOutput runs brew update and returns its output
+func (a *App) UpdateWithOutput() (string, error) {
+	return a.brewService.UpdateWithOutput()
+}
+
 // Doctor runs brew doctor
 func (a *App) Doctor() (string, error) {
 	return a.brewService.Doctor()

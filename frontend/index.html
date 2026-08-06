@@ -393,18 +393,8 @@
                 </div>
 
                 <div class="config-layout">
-                    <!-- Left: environment info -->
+                    <!-- Left: disk usage (inline display) -->
                     <div class="config-main">
-                        <!-- Brew Config -->
-                        <div class="settings-section">
-                            <h2 class="settings-heading">
-                                <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                                环境信息
-                                <span class="settings-heading-desc">brew config 输出</span>
-                            </h2>
-                            <pre id="config-output" class="output-pre">加载中...</pre>
-                        </div>
-
                         <!-- Disk Usage -->
                         <div class="settings-section">
                             <h2 class="settings-heading">
@@ -416,45 +406,57 @@
                         </div>
                     </div>
 
-                    <!-- Right: operations -->
+                    <!-- Right: quick operations (dashboard quick-action style; 更新弹框, 导出/导入内联) -->
                     <div class="config-side">
-                        <!-- Update -->
-                        <div class="settings-section">
+                        <div class="settings-section config-actions-section">
                             <h2 class="settings-heading">
                                 <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                                Homebrew 更新
-                                <span class="settings-heading-desc">更新本体与仓库索引</span>
+                                快速操作
+                                <span class="settings-heading-desc">点击卡片执行</span>
                             </h2>
-                            <p class="config-hint">拉取最新 Homebrew 版本与各 Tap 仓库索引，建议定期执行。</p>
-                            <button class="btn btn-primary" id="update-btn" onclick="runUpdate()">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                                </svg>
-                                执行 brew update
-                            </button>
-                            <pre id="update-output" class="output-pre output-pre-sm" style="margin-top:12px;">点击「执行 brew update」开始更新...</pre>
-                        </div>
+                            <div class="config-actions">
+                                <!-- Homebrew 更新（弹框） -->
+                                <button class="quick-action config-action" onclick="runUpdateQuick()">
+                                    <div class="quick-action-icon quick-action-green">
+                                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                                    </div>
+                                    <div class="quick-action-info">
+                                        <span class="quick-action-title">Homebrew 更新</span>
+                                        <span class="quick-action-desc">更新本体与仓库索引</span>
+                                    </div>
+                                    <svg class="quick-action-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                </button>
 
-                        <!-- Backup & Restore -->
-                        <div class="settings-section">
-                            <h2 class="settings-heading">
-                                <svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/><path d="M17 8l4-4m0 4-4-4"/></svg>
-                                备份与恢复
-                                <span class="settings-heading-desc">导出或导入软件包清单</span>
-                            </h2>
-                            <p class="config-hint">导出当前安装的软件包清单作为备份，或通过备份文件一键恢复安装所有软件包。</p>
-                            <div class="config-action-row">
-                                <button class="btn btn-primary" onclick="exportConfig()">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                    导出配置
-                                </button>
-                                <button class="btn btn-secondary" onclick="importConfig()">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                    导入配置
-                                </button>
+                                <!-- 导出配置（内联） -->
+                                <div class="config-action-wrap">
+                                    <button class="quick-action config-action" id="export-config-card" onclick="exportConfig()">
+                                        <div class="quick-action-icon quick-action-blue">
+                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                        </div>
+                                        <div class="quick-action-info">
+                                            <span class="quick-action-title">导出配置</span>
+                                            <span class="quick-action-desc">保存软件包清单</span>
+                                        </div>
+                                        <svg class="quick-action-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </button>
+                                    <div id="export-config-result" class="config-inline-result"></div>
+                                </div>
+
+                                <!-- 导入配置（内联） -->
+                                <div class="config-action-wrap">
+                                    <button class="quick-action config-action" id="import-config-card" onclick="importConfig()">
+                                        <div class="quick-action-icon quick-action-orange">
+                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                        </div>
+                                        <div class="quick-action-info">
+                                            <span class="quick-action-title">导入配置</span>
+                                            <span class="quick-action-desc">从备份文件恢复</span>
+                                        </div>
+                                        <svg class="quick-action-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+                                    </button>
+                                    <div id="import-config-result" class="config-inline-result"></div>
+                                </div>
                             </div>
-                            <div id="config-transfer-result" class="config-result"></div>
                         </div>
                     </div>
                 </div>

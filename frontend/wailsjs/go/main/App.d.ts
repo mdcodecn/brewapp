@@ -34,4 +34,6 @@ export function Unpin(arg1:string):Promise<void>;
 
 export function Update():Promise<void>;
 
+export function UpdateWithOutput():Promise<string>;
+
 export function Version():Promise<string>;

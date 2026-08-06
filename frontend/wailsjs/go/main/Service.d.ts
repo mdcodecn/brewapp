@@ -82,4 +82,6 @@ export function UntrustTap(arg1:string):Promise<void>;
 
 export function Update():Promise<void>;
 
+export function UpdateWithOutput():Promise<string>;
+
 export function Upgrade(arg1:Array<string>):Promise<void>;

@@ -66,6 +66,10 @@ export function Update() {
   return window['go']['main']['App']['Update']();
 }
 
+export function UpdateWithOutput() {
+  return window['go']['main']['App']['UpdateWithOutput']();
+}
+
 export function Version() {
   return window['go']['main']['App']['Version']();
 }
