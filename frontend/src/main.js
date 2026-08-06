@@ -368,25 +368,43 @@ async function refreshDashboard(force) {
         }
     });
 
-    // Slow outdated check renders on its own when it finishes
-    Service.GetOutdated().then(outdated => {
-        quickData.outdated = outdated;
+    // Slow outdated check renders on its own when it finishes.
+    // If the outdated tab already fetched a fresh copy, reuse it — don't run
+    // `brew outdated` twice for the same 5-minute window.
+    if (isCacheValid(tabCache.outdated)) {
+        quickData.outdated = tabCache.outdated.data;
         quickData._outdatedLoaded = true;
-        tabCache.dashboard.timestamp = Date.now();
-        if (currentTab === 'dashboard') {
-            renderDashboard(quickData);
-        }
-    }).catch(() => {});
+    } else {
+        Service.GetOutdated().then(outdated => {
+            quickData.outdated = outdated;
+            quickData._outdatedLoaded = true;
+            // Sync into the outdated tab cache so switching there doesn't re-fetch
+            tabCache.outdated.data = outdated;
+            tabCache.outdated.timestamp = Date.now();
+            tabCache.dashboard.timestamp = Date.now();
+            if (currentTab === 'dashboard') {
+                renderDashboard(quickData);
+            }
+        }).catch(() => {});
+    }
 }
 
 // Background refresh used when the dashboard cache is already valid:
-// re-fetch disk / taps / outdated, then render ONCE when all settle
+// re-fetch disk / taps / outdated, then render ONCE when all settle.
+// If the outdated tab cache is still fresh, reuse it instead of re-running
+// `brew outdated` for the same 5-minute window.
 async function refreshDashboardInBackground() {
     const data = tabCache.dashboard.data;
     if (!data) return;
+
+    // Skip re-fetching outdated if the shared cache is already fresh
+    const outdatedFresh = isCacheValid(tabCache.outdated)
+        ? Promise.resolve(tabCache.outdated.data)
+        : Service.GetOutdated();
+
     const [taps, outdated, services, disk] = await Promise.allSettled([
         Service.GetTaps(),
-        Service.GetOutdated(),
+        outdatedFresh,
         Service.ListServices(),
         Service.GetDiskUsage(),
     ]);
@@ -397,6 +415,9 @@ async function refreshDashboardInBackground() {
     if (outdated.status === 'fulfilled') {
         data.outdated = outdated.value;
         data._outdatedLoaded = true;
+        // Sync into the outdated tab cache so switching there doesn't re-fetch
+        tabCache.outdated.data = outdated.value;
+        tabCache.outdated.timestamp = Date.now();
     }
     if (services.status === 'fulfilled') {
         data.services = services.value;
@@ -930,6 +951,11 @@ async function loadOutdated() {
         const outdated = await Service.GetOutdated();
         tabCache.outdated.data = outdated;
         tabCache.outdated.timestamp = Date.now();
+        // Sync into the dashboard's cache so switching back doesn't re-fetch
+        if (tabCache.dashboard.data) {
+            tabCache.dashboard.data.outdated = outdated;
+            tabCache.dashboard.data._outdatedLoaded = true;
+        }
         renderOutdated(outdated);
     } catch (err) {
         document.getElementById('outdated-list').innerHTML =
@@ -942,6 +968,11 @@ async function loadOutdatedInBackground() {
         const outdated = await Service.GetOutdated();
         tabCache.outdated.data = outdated;
         tabCache.outdated.timestamp = Date.now();
+        // Sync into the dashboard's cache so switching back doesn't re-fetch
+        if (tabCache.dashboard.data) {
+            tabCache.dashboard.data.outdated = outdated;
+            tabCache.dashboard.data._outdatedLoaded = true;
+        }
 
         // Only re-render if still on outdated tab
         if (currentTab === 'outdated') {
