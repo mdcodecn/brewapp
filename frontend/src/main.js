@@ -626,13 +626,19 @@ function renderOutdatedPreview(outdated, loaded) {
     container.innerHTML = top.map(p => {
         const icon = p.type === 'cask' ? CASK_ICON : FORMULA_ICON;
         const iconCls = p.type === 'cask' ? 'pkg-icon-cask' : 'pkg-icon-formula';
+        const hasCur = !!p.version;
+        const hasNew = !!(p.latest_version && p.latest_version !== p.version);
+        const verBox = (hasCur || hasNew) ? `
+            <span class="outdated-versions">
+                ${hasCur ? `<span class="outdated-version" title="${escapeHtml(p.version)}">${escapeHtml(p.version)}</span>` : ''}
+                ${hasNew ? `<span class="outdated-version outdated-version-latest" title="${escapeHtml(p.latest_version)}">${escapeHtml(p.latest_version)}</span>` : ''}
+            </span>` : '';
         return `
         <div class="outdated-item">
             <div class="pkg-icon ${iconCls} pkg-icon-sm">${icon}</div>
             <span class="outdated-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
-            ${p.version ? `<span class="outdated-version" title="${escapeHtml(p.version)}">${escapeHtml(p.version)}</span>` : ''}
-            ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="outdated-version outdated-version-latest" title="${escapeHtml(p.latest_version)}">${escapeHtml(p.latest_version)}</span>` : ''}
-            <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
+            ${verBox}
+            <button class="btn btn-update-action btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
         </div>`;
     }).join('')
     + (remainder > 0 ? `<div class="outdated-more">还有 ${remainder} 个</div>` : '');
@@ -1011,7 +1017,7 @@ function renderOutdated(outdated) {
             </div>
             <div class="pkg-actions">
                 <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
-                <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
+                <button class="btn btn-update-action btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
             </div>
         </div>`;
     }).join('');

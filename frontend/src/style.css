@@ -452,17 +452,27 @@ body {
   color: #fff;
 }
 
-/* 配置页右上角 Homebrew 更新按钮 */
+/* 配置页右上角 Homebrew 更新按钮（与列表更新按钮同色） */
 .btn-update {
-  background: var(--success);
+  background: #4da3ff;
   color: #fff;
   padding: 8px 16px;
   border-radius: 9px;
   font-weight: 600;
 }
 
+/* 更新类操作按钮（浅蓝底 + 白字） */
+.btn-update-action {
+  background: #4da3ff;
+  color: #fff;
+}
+
+.btn-update-action:hover:not(:disabled) {
+  background: #3896ff;
+}
+
 .btn-update:hover:not(:disabled) {
-  background: #2db64d;
+  background: #3896ff;
   transform: translateY(-1px);
 }
 
@@ -958,15 +968,23 @@ body {
   white-space: nowrap;
 }
 
+.outdated-versions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
 .outdated-item .outdated-version {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 150px; /* 超长版本号截断为省略号，不再挤占应用名 */
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
   font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
   background: var(--bg-secondary);
-  padding: 2px 7px;
+  padding: 1px 6px;
   border-radius: 7px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -976,7 +994,7 @@ body {
 .outdated-item .outdated-version-latest {
   color: var(--warning);
   background: var(--warning-dim);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
 }
 
