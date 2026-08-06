@@ -629,9 +629,9 @@ function renderOutdatedPreview(outdated, loaded) {
         return `
         <div class="outdated-item">
             <div class="pkg-icon ${iconCls} pkg-icon-sm">${icon}</div>
-            <span class="outdated-name">${escapeHtml(p.name)}</span>
-            ${p.version ? `<span class="outdated-version">${escapeHtml(p.version)}</span>` : ''}
-            ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="outdated-version outdated-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
+            <span class="outdated-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+            ${p.version ? `<span class="outdated-version" title="${escapeHtml(p.version)}">${escapeHtml(p.version)}</span>` : ''}
+            ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="outdated-version outdated-version-latest" title="${escapeHtml(p.latest_version)}">${escapeHtml(p.latest_version)}</span>` : ''}
             <button class="btn btn-primary btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
         </div>`;
     }).join('')
@@ -1003,9 +1003,9 @@ function renderOutdated(outdated) {
             <div class="pkg-icon ${iconCls}">${icon}</div>
             <div class="pkg-main">
                 <div class="pkg-name-row">
-                    <span class="pkg-name">${escapeHtml(p.name)}</span>
-                    ${p.version ? `<span class="pkg-version">${escapeHtml(p.version)}</span>` : ''}
-                    ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="pkg-version pkg-version-latest">${escapeHtml(p.latest_version)}</span>` : ''}
+                    <span class="pkg-name" title="${escapeHtml(p.name)}">${escapeHtml(p.name)}</span>
+                    ${p.version ? `<span class="pkg-version" title="${escapeHtml(p.version)}">${escapeHtml(p.version)}</span>` : ''}
+                    ${p.latest_version && p.latest_version !== p.version ? `<span class="version-arrow">→</span><span class="pkg-version pkg-version-latest" title="${escapeHtml(p.latest_version)}">${escapeHtml(p.latest_version)}</span>` : ''}
                 </div>
                 ${p.description ? `<span class="pkg-desc">${escapeHtml(p.description)}</span>` : ''}
             </div>
@@ -1484,31 +1484,36 @@ function renderServices(services) {
                 ${sv.user ? `<span class="service-user">用户：${escapeHtml(sv.user)}</span>` : ''}
             </div>
             <div class="pkg-actions">
-                <button class="btn btn-secondary btn-sm" onclick="restartService('${escapeHtml(sv.name)}')" title="重启">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+                ${running ? `
+                <button class="service-action-btn service-action-running" onclick="toggleService('${escapeHtml(sv.name)}', false)" title="运行中 · 点击停止">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                </button>` : `
+                <button class="service-action-btn service-action-stopped" onclick="toggleService('${escapeHtml(sv.name)}', true)" title="已停止 · 点击启动">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>`}
+                <button class="service-action-btn service-action-restart" onclick="restartService('${escapeHtml(sv.name)}', this)" title="重启">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 5V2L7 7l5 5V8c3.3 0 6 2.7 6 6s-2.7 6-6 6-6-2.7-6-6H4c0 4.4 3.6 8 8 8s8-3.6 8-8-3.6-8-8-8z"/></svg>
                 </button>
-                <label class="switch">
-                    <input type="checkbox" data-service="${escapeHtml(sv.name)}" ${running ? 'checked' : ''} onchange="toggleService(this)">
-                    <span class="switch-track"><span class="switch-thumb"></span></span>
-                </label>
             </div>
         </div>`;
     }).join('');
 }
 
 window.restartService = restartService;
-async function restartService(name) {
+async function restartService(name, btn) {
     if (servicesBusy) return;
     servicesBusy = true;
-    const switches = document.querySelectorAll('.switch input');
-    switches.forEach(i => { i.disabled = true; });
+    const actions = document.querySelectorAll('.service-action-btn');
+    actions.forEach(b => { b.disabled = true; });
+    if (btn) btn.classList.add('is-busy');
     showToast(`正在重启 ${name}...`, 'info');
     try {
         await Service.RestartService(name);
         showToast(`服务 ${name} 已重启`, 'success');
         reloadServices();
     } catch (err) {
-        switches.forEach(i => { i.disabled = false; });
+        actions.forEach(b => { b.disabled = false; });
+        if (btn) btn.classList.remove('is-busy');
         showToast(`重启失败: ${err.message}`, 'error');
     }
     servicesBusy = false;
@@ -1528,7 +1533,7 @@ function reloadServices() {
     }, 400);
 }
 
-// Dashboard quick-management preview: top services with inline switches
+// Dashboard quick-management preview: top services with inline icon buttons
 function renderServicesPreview(services, loaded) {
     const container = document.getElementById('services-preview');
     const countEl = document.getElementById('service-section-count');
@@ -1536,10 +1541,10 @@ function renderServicesPreview(services, loaded) {
 
     if (!loaded) {
         if (countEl) countEl.textContent = '…';
-        container.innerHTML = `<div class="services-preview-grid">${Array.from({ length: 3 }, () => `
+        container.innerHTML = `<div class="services-preview-grid">${Array.from({ length: 2 }, () => `
             <div class="service-chip">
                 <div class="skeleton" style="width:70px;height:11px;"></div>
-                <div class="skeleton" style="width:34px;height:20px;border-radius:999px;"></div>
+                <div class="skeleton" style="width:24px;height:24px;border-radius:7px;"></div>
             </div>`).join('')}</div>`;
         return;
     }
@@ -1557,7 +1562,7 @@ function renderServicesPreview(services, loaded) {
         return;
     }
 
-    // Compact quick management: wrapping chips, each with name + mini switch,
+    // Compact quick management: wrapping chips, each with name + mini action button,
     // so several services fit side-by-side instead of filling the column vertically
     const top = list.slice(0, 8);
     container.innerHTML = `<div class="services-preview-grid">${top.map(sv => {
@@ -1565,32 +1570,28 @@ function renderServicesPreview(services, loaded) {
         return `
             <div class="service-chip${isRunning ? ' is-running' : ''}">
                 <span class="service-chip-name">${escapeHtml(sv.name)}</span>
-                <label class="switch switch-sm">
-                    <input type="checkbox" data-service="${escapeHtml(sv.name)}" ${isRunning ? 'checked' : ''} onchange="toggleService(this)">
-                    <span class="switch-track"><span class="switch-thumb"></span></span>
-                </label>
+                <button class="service-action-btn service-action-sm ${isRunning ? 'service-action-running' : 'service-action-stopped'}" onclick="toggleService('${escapeHtml(sv.name)}', ${isRunning})" title="${isRunning ? '运行中 · 点击停止' : '已停止 · 点击启动'}">
+                    ${isRunning
+                        ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'
+                        : '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>'}
+                </button>
             </div>`;
     }).join('')}</div>`;
 }
 
-// Sliding switch: ON = start (register at login), OFF = stop (unregister)
+// Icon status indicators: running (play, green) / stopped (pause bars, grey), click toggles
 let servicesBusy = false;
 
 window.toggleService = toggleService;
-async function toggleService(input) {
-    // Ignore toggles while another service operation is in flight
-    if (servicesBusy) {
-        input.checked = !input.checked;
-        return;
-    }
+async function toggleService(name, on) {
+    // Ignore while another service operation is in flight
+    if (servicesBusy) return;
 
-    const name = input.dataset.service;
-    const on = input.checked;
     servicesBusy = true;
 
-    // Lock every switch on the page (services tab + dashboard preview) while the operation runs
-    const switches = document.querySelectorAll('.switch input');
-    switches.forEach(i => { i.disabled = true; });
+    // Lock every action button on the page (services tab + dashboard preview) while the operation runs
+    const actions = document.querySelectorAll('.service-action-btn');
+    actions.forEach(b => { b.disabled = true; });
 
     showToast(`正在${on ? '启动' : '停止'} ${name}...`, 'info');
     try {
@@ -1602,9 +1603,7 @@ async function toggleService(input) {
         showToast(`服务 ${name} 已${on ? '启动' : '停止'}`, 'success');
         reloadServices();
     } catch (err) {
-        // Revert the switch and re-enable the list
-        input.checked = !on;
-        switches.forEach(i => { i.disabled = false; });
+        actions.forEach(b => { b.disabled = false; });
         showToast(`${on ? '启动' : '停止'}失败: ${err.message}`, 'error');
     }
     servicesBusy = false;
