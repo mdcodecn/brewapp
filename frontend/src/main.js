@@ -860,8 +860,8 @@ function renderInstalled(type, packages) {
                 <span class="pkg-desc">${escapeHtml(p.description || '暂无描述')}</span>
             </div>
             <div class="pkg-actions">
-                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
                 ${p.type === 'formula' ? `<button class="btn btn-secondary btn-sm${p.pinned ? ' btn-pinned' : ''}" onclick="togglePin('${escapeHtml(p.name)}', ${p.pinned})">${p.pinned ? '解锁' : '锁定'}</button>` : ''}
+                <button class="btn btn-secondary btn-sm" onclick="showDetailModal(${jsonInline({name: p.name, type: p.type})})">详情</button>
                 <button class="btn btn-warning btn-sm" onclick="reinstallPackage('${escapeHtml(p.name)}', '${p.type}')">重装</button>
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${p.type}')">卸载</button>
             </div>
