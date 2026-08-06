@@ -58,6 +58,10 @@ export function SetMirrorSource(arg1) {
   return window['go']['main']['App']['SetMirrorSource'](arg1);
 }
 
+export function TestMirrorSpeeds() {
+  return window['go']['main']['App']['TestMirrorSpeeds']();
+}
+
 export function Unpin(arg1) {
   return window['go']['main']['App']['Unpin'](arg1);
 }

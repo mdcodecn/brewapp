@@ -66,6 +66,8 @@ export function StartService(arg1:string):Promise<void>;
 
 export function StopService(arg1:string):Promise<void>;
 
+export function TestMirrorSpeeds():Promise<Array<main.MirrorSpeedResult>>;
+
 export function TrustTap(arg1:string):Promise<void>;
 
 export function Uninstall(arg1:string,arg2:string):Promise<void>;

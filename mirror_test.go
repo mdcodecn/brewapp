@@ -1,11 +1,26 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// newTestMirrorServer serves a fake API index at /api/formula.jws.json.
+func newTestMirrorServer(t *testing.T, payload int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/formula.jws.json" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(make([]byte, payload))
+	}))
+}
 
 func TestFilterMirrorLines(t *testing.T) {
 	input := `# sample zshrc
@@ -233,5 +248,94 @@ func TestMirrorServiceFlow(t *testing.T) {
 	}
 	if got := os.Getenv("HOMEBREW_API_DOMAIN"); got != "" {
 		t.Errorf("HOMEBREW_API_DOMAIN after official = %q, want empty", got)
+	}
+}
+
+// TestSpeedTestURL verifies the benchmark target derivation for mirrors and
+// the official source.
+func TestSpeedTestURL(t *testing.T) {
+	src := MirrorSource{Env: map[string]string{
+		"HOMEBREW_API_DOMAIN": "https://mirrors.example.com/homebrew-bottles/api/",
+	}}
+	if got := speedTestURL(src); got != "https://mirrors.example.com/homebrew-bottles/api/formula.jws.json" {
+		t.Errorf("mirror url = %q", got)
+	}
+	if got := speedTestURL(MirrorSource{Env: map[string]string{}}); got != "https://formulae.brew.sh/api/formula.jws.json" {
+		t.Errorf("official url = %q", got)
+	}
+}
+
+// TestTestMirrorSpeed exercises the speed measurement against a local server
+// (no external network): latency, throughput and byte accounting, plus the
+// unreachable-host error path.
+func TestTestMirrorSpeed(t *testing.T) {
+	const payload = 1 << 20 // 1 MiB
+	ts := newTestMirrorServer(t, payload)
+	defer ts.Close()
+
+	res := testMirrorSpeed(MirrorSource{
+		ID:   "test",
+		Name: "Test",
+		Env:  map[string]string{"HOMEBREW_API_DOMAIN": ts.URL + "/api"},
+	})
+	if !res.Success {
+		t.Fatalf("speed test failed: %v", res.Error)
+	}
+	if res.URL != ts.URL+"/api/formula.jws.json" {
+		t.Errorf("url = %q", res.URL)
+	}
+	if res.SpeedKBps <= 0 {
+		t.Errorf("speed = %v, want > 0", res.SpeedKBps)
+	}
+	if res.LatencyMs < 0 {
+		t.Errorf("latency = %v, want >= 0", res.LatencyMs)
+	}
+	if want := float64(payload) / 1024; res.DownloadedKB != want {
+		t.Errorf("downloaded = %v, want %v", res.DownloadedKB, want)
+	}
+
+	// Unreachable mirror must report an error, not success.
+	bad := testMirrorSpeed(MirrorSource{
+		ID: "bad", Name: "Bad",
+		Env: map[string]string{"HOMEBREW_API_DOMAIN": "http://127.0.0.1:1"},
+	})
+	if bad.Success {
+		t.Error("unreachable mirror reported success")
+	}
+	if bad.Error == "" {
+		t.Error("expected an error message")
+	}
+}
+
+// TestTestMirrorSpeedsParallel verifies sources are measured concurrently and
+// results are returned in input order — against local servers only, so the
+// unit tests never depend on external network.
+func TestTestMirrorSpeedsParallel(t *testing.T) {
+	const payload = 512 << 10 // 512 KiB
+	s1 := newTestMirrorServer(t, payload)
+	defer s1.Close()
+	s2 := newTestMirrorServer(t, payload)
+	defer s2.Close()
+
+	sources := []MirrorSource{
+		{ID: "a", Name: "A", Env: map[string]string{"HOMEBREW_API_DOMAIN": s1.URL + "/api"}},
+		{ID: "b", Name: "B", Env: map[string]string{"HOMEBREW_API_DOMAIN": s2.URL + "/api"}},
+		{ID: "c", Name: "C", Env: map[string]string{"HOMEBREW_API_DOMAIN": "http://127.0.0.1:1"}},
+	}
+
+	results := testMirrorSpeeds(sources)
+	if len(results) != len(sources) {
+		t.Fatalf("got %d results, want %d", len(results), len(sources))
+	}
+	for i, r := range results {
+		if r.ID != sources[i].ID {
+			t.Errorf("result %d = %q, want %q (order must match input)", i, r.ID, sources[i].ID)
+		}
+	}
+	if !results[0].Success || !results[1].Success {
+		t.Error("local mirrors should succeed")
+	}
+	if results[2].Success {
+		t.Error("unreachable mirror should fail")
 	}
 }

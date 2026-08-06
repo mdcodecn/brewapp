@@ -1893,6 +1893,42 @@ body {
   flex-shrink: 0;
 }
 
+/* Mirror speed test row (inside each card's info column) */
+.mirror-speed {
+  margin-top: 4px;
+  min-height: 14px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mirror-speed-ok {
+  color: #34c759;
+  font-weight: 600;
+}
+
+.mirror-speed-err {
+  color: var(--danger, #ff3b30);
+}
+
+.mirror-speed-testing {
+  color: var(--text-secondary);
+}
+
+.mirror-speed-test-btn {
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+.mirror-speed-test-btn:disabled {
+  cursor: default;
+}
+
 .mirror-error {
   padding: 16px;
   font-size: 12px;

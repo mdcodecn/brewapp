@@ -2,10 +2,14 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 )
 
 // MirrorSource describes a Homebrew download mirror preset.
@@ -185,6 +189,104 @@ func normalizeURL(u string) string {
 		u = strings.ReplaceAll(u, "//", "/")
 	}
 	return protocol + u
+}
+
+// MirrorSpeedResult reports one mirror's measured latency and download speed.
+type MirrorSpeedResult struct {
+	ID           string  `json:"id"`
+	Name         string  `json:"name"`
+	URL          string  `json:"url"`
+	LatencyMs    int64   `json:"latency_ms"`    // time to first byte (response headers)
+	SpeedKBps    float64 `json:"speed_kbps"`    // measured download throughput
+	DownloadedKB float64 `json:"downloaded_kb"` // bytes actually downloaded for the test
+	Success      bool    `json:"success"`
+	Error        string  `json:"error,omitempty"`
+}
+
+// speedTestURL returns the file used to benchmark a mirror: the API index
+// (formula.jws.json, ~33 MB on every mirror) so the measurement is comparable
+// across sources. Official uses brew's default API host since it sets no
+// HOMEBREW_API_DOMAIN.
+func speedTestURL(m MirrorSource) string {
+	if api, ok := m.Env["HOMEBREW_API_DOMAIN"]; ok && api != "" {
+		return strings.TrimSuffix(api, "/") + "/formula.jws.json"
+	}
+	return "https://formulae.brew.sh/api/formula.jws.json"
+}
+
+// speedTestCapBytes bounds how much of the test file is downloaded. 2 MiB is
+// plenty to gauge throughput without pulling tens of MB per mirror.
+const speedTestCapBytes = 2 << 20
+
+// speedTestTimeout bounds each mirror's whole test (DNS + connect + download).
+const speedTestTimeout = 10 * time.Second
+
+// TestMirrorSpeeds benchmarks every preset mirror in parallel and returns the
+// results in the same order as predefinedMirrorSources.
+func (s *Service) TestMirrorSpeeds() []MirrorSpeedResult {
+	return testMirrorSpeeds(predefinedMirrorSources())
+}
+
+// testMirrorSpeeds runs the measurement for a list of sources concurrently and
+// returns the results in the same order as the input.
+func testMirrorSpeeds(sources []MirrorSource) []MirrorSpeedResult {
+	results := make([]MirrorSpeedResult, len(sources))
+	var wg sync.WaitGroup
+	for i, src := range sources {
+		wg.Add(1)
+		go func(i int, src MirrorSource) {
+			defer wg.Done()
+			results[i] = testMirrorSpeed(src)
+		}(i, src)
+	}
+	wg.Wait()
+	return results
+}
+
+// testMirrorSpeed measures one mirror: latency (time until response headers)
+// and download throughput over a capped read of the API index.
+func testMirrorSpeed(src MirrorSource) MirrorSpeedResult {
+	res := MirrorSpeedResult{ID: src.ID, Name: src.Name, URL: speedTestURL(src)}
+
+	client := &http.Client{Timeout: speedTestTimeout}
+	// Some mirrors (e.g. USTC) whitelist the curl user agent and reject or
+	// neuter other clients (403 / empty 204), so identify as curl for a fair,
+	// representative test.
+	req, err := http.NewRequest(http.MethodGet, res.URL, nil)
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	req.Header.Set("User-Agent", "curl/8.4.0")
+	start := time.Now()
+	resp, err := client.Do(req)
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	defer resp.Body.Close()
+	res.LatencyMs = time.Since(start).Milliseconds()
+
+	if resp.StatusCode != http.StatusOK {
+		res.Error = fmt.Sprintf("HTTP %d", resp.StatusCode)
+		return res
+	}
+
+	// Throughput over a capped read of the body.
+	readStart := time.Now()
+	n, err := io.Copy(io.Discard, io.LimitReader(resp.Body, speedTestCapBytes))
+	if err != nil {
+		res.Error = err.Error()
+		return res
+	}
+	elapsed := time.Since(readStart).Seconds()
+	if elapsed <= 0 {
+		elapsed = 0.001
+	}
+	res.DownloadedKB = float64(n) / 1024
+	res.SpeedKBps = res.DownloadedKB / elapsed
+	res.Success = true
+	return res
 }
 
 // shellConfigPath returns the shell profile that should hold the Homebrew

@@ -30,6 +30,8 @@ export function ResetBrewDetection():Promise<void>;
 
 export function SetMirrorSource(arg1:string):Promise<void>;
 
+export function TestMirrorSpeeds():Promise<Array<main.MirrorSpeedResult>>;
+
 export function Unpin(arg1:string):Promise<void>;
 
 export function UpdateWithOutput():Promise<string>;

@@ -109,3 +109,8 @@ func (a *App) GetMirrorSources() (*MirrorSourcesResponse, error) {
 func (a *App) SetMirrorSource(id string) error {
 	return a.brewService.SetMirrorSource(id)
 }
+
+// TestMirrorSpeeds benchmarks all preset mirrors (latency + download speed)
+func (a *App) TestMirrorSpeeds() []MirrorSpeedResult {
+	return a.brewService.TestMirrorSpeeds()
+}

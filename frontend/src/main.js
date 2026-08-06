@@ -2087,6 +2087,71 @@ const MIRROR_BADGE = {
 
 const MIRROR_CHECK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
 
+// ===== Mirror speed test (测速) =====
+// Results are cached so re-renders (e.g. after switching source) keep showing
+// the last measurement instead of resetting to "未测速".
+let mirrorSpeedResults = null;
+
+function mirrorSpeedDisplay(r) {
+    const kb = r.speed_kbps >= 1024
+        ? (r.speed_kbps / 1024).toFixed(1) + ' MB/s'
+        : Math.max(1, Math.round(r.speed_kbps)) + ' KB/s';
+    return `⚡ ${r.latency_ms}ms · ${kb}`;
+}
+
+window.testMirrorSpeeds = testMirrorSpeeds;
+async function testMirrorSpeeds() {
+    const btn = document.getElementById('mirror-speed-test-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span> 测速中...';
+    }
+    // Mark every card as testing immediately; results fill in per-card.
+    document.querySelectorAll('.mirror-card').forEach(card => {
+        const box = card.querySelector('.mirror-speed');
+        if (box) {
+            box.className = 'mirror-speed mirror-speed-testing';
+            box.innerHTML = '<span class="spinner" style="width:10px;height:10px;border-width:2px;"></span> 测速中...';
+        }
+    });
+    try {
+        const results = await App.TestMirrorSpeeds();
+        mirrorSpeedResults = results;
+        applyMirrorSpeedResults(results);
+    } catch (err) {
+        showToast('测速失败: ' + err.message, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> 测速';
+        }
+    }
+}
+
+function applyMirrorSpeedResults(results) {
+    if (!results || !results.length) return;
+    // Highlight the fastest successful mirror with a "最快" tag.
+    let fastestId = null, fastestKBps = -1;
+    for (const r of results) {
+        if (r.success && r.speed_kbps > fastestKBps) { fastestKBps = r.speed_kbps; fastestId = r.id; }
+    }
+    results.forEach(r => {
+        const card = document.querySelector(`.mirror-card[data-mirror-id="${r.id}"]`);
+        if (!card) return;
+        const box = card.querySelector('.mirror-speed');
+        if (!box) return;
+        if (r.success) {
+            box.className = 'mirror-speed mirror-speed-ok';
+            box.textContent = mirrorSpeedDisplay(r) + (r.id === fastestId ? ' · 最快' : '');
+            box.title = '测速文件: ' + r.url;
+        } else {
+            box.className = 'mirror-speed mirror-speed-err';
+            box.textContent = '测速失败';
+            box.title = r.error || '无法连接';
+        }
+    });
+}
+
 function renderMirrorSources() {
     const list = document.getElementById('mirror-list');
     if (!list) return;
@@ -2102,16 +2167,20 @@ function renderMirrorSources() {
     list.innerHTML = mirrorSources.map(src => {
         const active = src.id === currentMirror;
         const badge = MIRROR_BADGE[src.id] || { text: '镜像', cls: 'mirror-badge-custom' };
-        return '<div class="mirror-card' + (active ? ' active' : '') + '" onclick="switchMirror(\'' + src.id + '\')" title="' + (active ? '当前使用中' : '点击切换') + '">'
+        return '<div class="mirror-card' + (active ? ' active' : '') + '" data-mirror-id="' + src.id + '" onclick="switchMirror(\'' + src.id + '\')" title="' + (active ? '当前使用中' : '点击切换') + '">'
             + '<div class="mirror-badge ' + badge.cls + '">' + badge.text + '</div>'
             + '<div class="mirror-info">'
             +   '<div class="mirror-name">' + escapeHtml(src.name) + (active ? '<span class="mirror-current-tag">当前</span>' : '') + '</div>'
             +   '<div class="mirror-desc">' + escapeHtml(src.description) + '</div>'
             +   '<div class="mirror-url">' + escapeHtml(src.url) + '</div>'
+            +   '<div class="mirror-speed">未测速</div>'
             + '</div>'
             + '<div class="mirror-check">' + (active ? MIRROR_CHECK_SVG : '') + '</div>'
         + '</div>';
     }).join('');
+
+    // Re-apply cached speed results after any re-render.
+    if (mirrorSpeedResults) applyMirrorSpeedResults(mirrorSpeedResults);
 }
 
 // Exposed for inline onclick handlers

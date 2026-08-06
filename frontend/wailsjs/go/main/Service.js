@@ -130,6 +130,10 @@ export function StopService(arg1) {
   return window['go']['main']['Service']['StopService'](arg1);
 }
 
+export function TestMirrorSpeeds() {
+  return window['go']['main']['Service']['TestMirrorSpeeds']();
+}
+
 export function TrustTap(arg1) {
   return window['go']['main']['Service']['TrustTap'](arg1);
 }

@@ -196,6 +196,32 @@ export namespace main {
 		    return a;
 		}
 	}
+	export class MirrorSpeedResult {
+	    id: string;
+	    name: string;
+	    url: string;
+	    latency_ms: number;
+	    speed_kbps: number;
+	    downloaded_kb: number;
+	    success: boolean;
+	    error?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new MirrorSpeedResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.url = source["url"];
+	        this.latency_ms = source["latency_ms"];
+	        this.speed_kbps = source["speed_kbps"];
+	        this.downloaded_kb = source["downloaded_kb"];
+	        this.success = source["success"];
+	        this.error = source["error"];
+	    }
+	}
 	export class PackageDetail {
 	    name: string;
 	    version: string;
