@@ -281,36 +281,122 @@ function isCacheValid(cache) {
     return cache && cache.data && (Date.now() - cache.timestamp < CACHE_TTL);
 }
 
-function markCacheDirty(tab) {
-    // When a user action changes data, invalidate the cache for affected tabs
-    if ((tab === 'installed') || tab === 'dashboard') {
-        tabCache.dashboard.data = null;
-        tabCache.dashboard.timestamp = 0;
-        tabCache.installed.data = null;
-        tabCache.installed.timestamp = 0;
+// ===== 就地更新（Local Patch）=====
+// 操作完成后不再清空缓存/快照再全量重取，而是在内存数据上直接应用变更并
+// 重绘当前视图，数据一致性交给各自的静默后台刷新（loadXInBackground）兜底。
+// 这样列表始终有内容：不闪骨架屏、不整页重载、不丢滚动位置。
+
+// 重建列表时保留标签页滚动位置，防止操作后内容高度变化导致页面"跳动"
+function setListHTML(container, html) {
+    const tabEl = document.querySelector('.tab-content.active');
+    const prevScroll = tabEl ? tabEl.scrollTop : 0;
+    container.innerHTML = html;
+    if (tabEl) tabEl.scrollTop = prevScroll;
+}
+
+// 就地更新已安装列表快照：mutate(list) 直接修改 installedPackages
+function patchInstalled(mutate) {
+    mutate(installedPackages);
+    tabCache.installed.data = installedPackages;
+    tabCache.installed.timestamp = Date.now();
+    updateInstalledCounts();
+    if (currentTab === 'installed') renderInstalled(installedType, installedPackages);
+    if (currentTab === 'dashboard' && tabCache.dashboard.data) {
+        tabCache.dashboard.data.packages = installedPackages;
+        renderDashboard(tabCache.dashboard.data);
     }
-    if (tab === 'outdated' || tab === 'dashboard') {
-        tabCache.dashboard.data = null;
-        tabCache.dashboard.timestamp = 0;
-        tabCache.outdated.data = null;
-        tabCache.outdated.timestamp = 0;
+}
+
+// 就地更新待更新列表：match 为函数时按谓词过滤，否则按名字数组过滤
+function patchOutdated(match) {
+    const filter = typeof match === 'function' ? match : (p => !match.includes(p.name));
+    const list = tabCache.outdated.data;
+    const dash = currentTab === 'dashboard' && tabCache.dashboard.data ? tabCache.dashboard.data : null;
+
+    if (list) {
+        const keep = list.filter(filter);
+        list.length = 0;
+        list.push(...keep);
+        tabCache.outdated.timestamp = Date.now();
+    }
+    // 概览页缓存可能持有独立数组引用，同样就地更新
+    if (dash && dash.outdated) {
+        const keep = dash.outdated.filter(filter);
+        dash.outdated.length = 0;
+        dash.outdated.push(...keep);
+        dash._outdatedLoaded = true;
     }
 
-    if (tab === 'taps') {
-        tabCache.taps.data = null;
-        tabCache.taps.timestamp = 0;
+    if (currentTab === 'outdated' && list) {
+        renderOutdated(list);
     }
-    if (tab === 'services') {
-        tabCache.services.data = null;
-        tabCache.services.timestamp = 0;
-        // Service actions change the dashboard stat too
-        tabCache.dashboard.data = null;
-        tabCache.dashboard.timestamp = 0;
+    if (dash) {
+        renderDashboard(dash);
     }
-    // Config tab includes update, doctor, vulns
-    if (tab === 'config' || tab === 'update' || tab === 'doctor' || tab === 'vulns') {
-        tabCache.config.data = null;
-        tabCache.config.timestamp = 0;
+    // renderOutdated 不更新徽标，统一在此同步（renderDashboard 内部也会更新，重复调用无害）
+    updateOutdatedBadge(list || (dash && dash.outdated) || []);
+}
+
+// 就地更新服务状态：只改单个服务的状态并重绘
+function patchServices(name, status) {
+    const list = tabCache.services.data;
+    if (!list) return;
+    const sv = list.find(s => s.name === name);
+    if (sv) {
+        sv.status = status;
+        if (status !== 'started') sv.pid = '';
+    } else {
+        list.push({ name, status });
+    }
+    tabCache.services.timestamp = Date.now();
+    updateServiceBadge(list);
+    if (currentTab === 'services') renderServices(list);
+    if (currentTab === 'dashboard' && tabCache.dashboard.data) {
+        tabCache.dashboard.data.services = list;
+        renderDashboard(tabCache.dashboard.data);
+    }
+}
+
+// 就地更新仓库列表：action 为 'add'（name 为新仓库名）或 'remove'（name 为仓库名）
+function patchTaps(action, name) {
+    const list = tabCache.taps.data;
+    if (!list) return;
+    const changed = action === 'add' && !list.some(t => t.split(' ')[0] === name)
+        ? [...list, name]
+        : action === 'remove'
+            ? list.filter(t => t.split(' ')[0] !== name)
+            : list;
+    tabCache.taps.data = changed;
+    tabCache.taps.timestamp = Date.now();
+    // 概览页缓存同步（无论当前在哪个 tab，保证下次进入概览时统计正确）
+    if (tabCache.dashboard.data) tabCache.dashboard.data.taps = changed;
+    if (currentTab === 'taps') renderTaps(changed, cachedTrustInfo);
+    if (currentTab === 'dashboard' && tabCache.dashboard.data) {
+        renderDashboard(tabCache.dashboard.data);
+    }
+}
+
+// 静默刷新磁盘占用（cleanup / autoremove 之后），不重载整个页面
+async function refreshDiskUsageSilent() {
+    try {
+        cachedDiskUsage = await Service.GetDiskUsage();
+    } catch (err) {
+        return;
+    }
+    updateDiskStat();
+    if (currentTab === 'config') renderConfigDiskUsage();
+}
+
+// Sidebar 待更新徽标（跟随顶层筛选）
+function updateOutdatedBadge(outdated) {
+    const outdatedCount = outdatedTopLevelCount(outdated || []);
+    const badge = document.getElementById('outdated-badge');
+    if (!badge) return;
+    if (outdatedCount > 0) {
+        badge.style.display = 'inline';
+        badge.textContent = outdatedCount;
+    } else {
+        badge.style.display = 'none';
     }
 }
 
@@ -671,14 +757,7 @@ function renderDashboard(data) {
     updateDiskStat();
 
     // Outdated badge (sidebar) — respects leaves filter
-    const outdatedCount = outdatedTopLevelCount(outdated);
-    const badge = document.getElementById('outdated-badge');
-    if (outdatedCount > 0) {
-        badge.style.display = 'inline';
-        badge.textContent = outdatedCount;
-    } else {
-        badge.style.display = 'none';
-    }
+    updateOutdatedBadge(outdated);
 
     // Sidebar badge for repository (tap) count
     updateTapBadge((data.taps || []).length);
@@ -830,7 +909,7 @@ function renderInstalled(type, packages) {
     if (filtered.length === 0) {
         if (packages.length === 0 && !installedLoaded) {
             // Still loading — show skeletons
-            container.innerHTML = Array.from({length: 5}, () => `
+            setListHTML(container, Array.from({length: 5}, () => `
                 <div class="skeleton-row">
                     <div class="skeleton sk-icon"></div>
                     <div class="skeleton-row-main">
@@ -842,24 +921,24 @@ function renderInstalled(type, packages) {
                     </div>
                     <div class="skeleton sk-badge"></div>
                 </div>
-            `).join('');
+            `).join(''));
         } else if (search) {
-            container.innerHTML = emptyStateHTML(
+            setListHTML(container, emptyStateHTML(
                 SEARCH_OFF_ICON,
                 '未找到匹配的包',
                 `没有名称或描述包含「${search}」的${typeLabel}`
-            );
+            ));
         } else {
             const icon = type === 'cask' ? CASK_ICON : type === 'formula' ? FORMULA_ICON : CASK_ICON;
-            container.innerHTML = emptyStateHTML(
+            setListHTML(container, emptyStateHTML(
                 icon,
                 type === 'all' ? '尚未安装任何软件包' : `尚未安装任何${typeLabel}`,
                 '前往「搜索」页面查找并安装软件包'
-            );
+            ));
         }
         return;
     }
-    container.innerHTML = filtered.map(p => `
+    setListHTML(container, filtered.map(p => `
         <div class="pkg-item">
             <div class="pkg-icon pkg-icon-${p.type}">${p.type === 'cask' ? CASK_ICON : FORMULA_ICON}</div>
             <div class="pkg-main">
@@ -876,7 +955,7 @@ function renderInstalled(type, packages) {
                 <button class="btn btn-danger btn-sm" onclick="uninstallPackage('${escapeHtml(p.name)}', '${p.type}')">卸载</button>
             </div>
         </div>
-    `).join('');
+    `).join(''));
 }
 
 window.filterInstalled = filterInstalled;
@@ -894,14 +973,9 @@ async function reinstallPackage(name, type) {
         async () => {
             try {
                 await Service.Reinstall(name, type);
-                // Reload after a short delay
-                setTimeout(() => {
-                    markCacheDirty('installed');
-                    tabCache.installed.data = null;
-                    tabCache.installed.timestamp = 0;
-                    installedPackages = [];
-                    loadInstalled(currentTab);
-                }, 500);
+                // 重装会装到最新版：从待更新列表移除，后台静默同步已安装列表
+                patchOutdated([name]);
+                loadInstalledInBackground();
                 return `${name} 重装成功`;
             } catch (err) {
                 throw new Error(`重装失败: ${err.message}`);
@@ -920,14 +994,12 @@ async function uninstallPackage(name, type) {
         async () => {
             try {
                 await Service.Uninstall(name, type);
-                markCacheDirty('installed');
-                // Clear cache and reload
-                tabCache.installed.data = null;
-                tabCache.installed.timestamp = 0;
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                installedPackages = [];
-                loadInstalled(currentTab);
+                // 就地移除该包并同步待更新列表，不再全量重取
+                patchInstalled(list => {
+                    const idx = list.findIndex(p => p.name === name && p.type === type);
+                    if (idx >= 0) list.splice(idx, 1);
+                });
+                patchOutdated([name]);
                 return `${name} 已卸载`;
             } catch (err) {
                 throw new Error(`卸载失败: ${err.message}`);
@@ -1009,14 +1081,17 @@ async function installPackage(name, type) {
         async () => {
             try {
                 await Service.Install(name, type);
-                markCacheDirty('installed');
-                markCacheDirty('dashboard');
-                // Clear cache and reload
-                tabCache.installed.data = null;
-                tabCache.installed.timestamp = 0;
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                installedPackages = [];
+                // 就地插入占位条目（不闪骨架屏），后台同步补齐完整信息
+                patchInstalled(list => {
+                    if (!list.some(p => p.name === name && p.type === type)) {
+                        list.push({ name, type, version: '', description: '', pinned: false, installed: true, outdated: false });
+                        // 新装的命令行属于顶层包，本地同步进 leaves，保证计数一致
+                        if (type === 'formula' && cachedLeaves && !cachedLeaves.includes(name)) {
+                            cachedLeaves.push(name);
+                        }
+                    }
+                });
+                loadInstalledInBackground();
                 return `${name} 安装成功`;
             } catch (err) {
                 throw new Error(`安装失败: ${err.message}`);
@@ -1095,13 +1170,13 @@ function renderOutdated(outdated) {
     if (upgradeAllBtn) upgradeAllBtn.disabled = outdated.length === 0;
 
     if (filtered.length === 0) {
-        container.innerHTML = outdated.length === 0
+        setListHTML(container, outdated.length === 0
             ? emptyStateHTML(CHECK_ICON, '所有包都是最新的', '没有可用的更新')
-            : emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试');
+            : emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试'));
         return;
     }
 
-    container.innerHTML = filtered.map(p => {
+    setListHTML(container, filtered.map(p => {
         const icon = p.type === 'cask' ? CASK_ICON : FORMULA_ICON;
         const iconCls = p.type === 'cask' ? 'pkg-icon-cask' : 'pkg-icon-formula';
         return `
@@ -1120,7 +1195,7 @@ function renderOutdated(outdated) {
                 <button class="btn btn-update-action btn-sm" onclick="upgradePackage('${escapeHtml(p.name)}')">更新</button>
             </div>
         </div>`;
-    }).join('');
+    }).join(''));
 }
 
 async function upgradePackage(name) {
@@ -1130,17 +1205,8 @@ async function upgradePackage(name) {
         async () => {
             try {
                 await Service.Upgrade([name]);
-                markCacheDirty('outdated');
-                markCacheDirty('dashboard');
-                tabCache.outdated.data = null;
-                tabCache.outdated.timestamp = 0;
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                if (currentTab === 'dashboard') {
-                    refreshDashboard();
-                } else {
-                    loadOutdated();
-                }
+                // 就地移除已更新的包，同步徽标与概览预览
+                patchOutdated([name]);
                 return `${name} 更新成功`;
             } catch (err) {
                 throw new Error('更新失败: ' + err.message);
@@ -1165,13 +1231,10 @@ async function upgradeAll() {
             try {
                 await Service.Upgrade([]);
                 showToast('全部更新完成', 'success');
-                markCacheDirty('outdated');
-                markCacheDirty('dashboard');
-                tabCache.outdated.data = null;
-                tabCache.outdated.timestamp = 0;
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                loadOutdated();
+                // brew upgrade 全部成功才会返回 nil：本地清空待更新列表，
+                // 后台静默复查兜底，避免立即整页重载
+                patchOutdated(() => false);
+                loadOutdatedInBackground();
             } catch (err) {
                 showToast('更新失败: ' + err.message, 'error');
             }
@@ -1245,17 +1308,9 @@ window.importConfig = async function() {
 
         setInlineResult('import-config-result', (ok ? '✓ ' : '✗ ') + message, ok);
 
-        // Packages changed -> refresh caches
-        markCacheDirty('installed');
-        markCacheDirty('dashboard');
-        markCacheDirty('outdated');
-        tabCache.installed.data = null;
-        tabCache.installed.timestamp = 0;
-        tabCache.dashboard.data = null;
-        tabCache.dashboard.timestamp = 0;
-        tabCache.outdated.data = null;
-        tabCache.outdated.timestamp = 0;
-        installedPackages = [];
+        // Packages changed -> silent background sync, keep current lists visible
+        loadInstalledInBackground();
+        loadOutdatedInBackground();
     } catch (err) {
         setInlineResult('import-config-result', '✗ 导入失败：' + err.message, false);
     } finally {
@@ -1274,10 +1329,8 @@ async function cleanupBrew() {
             setButtonLoading(btn, true, '清理缓存');
             try {
                 await Service.Cleanup();
-                markCacheDirty('dashboard');
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                refreshDashboard();
+                // 只刷新磁盘占用数据，不清缓存、不整页重载
+                refreshDiskUsageSilent();
                 return '清理完成';
             } catch (err) {
                 throw new Error(`清理失败: ${err.message}`);
@@ -1300,10 +1353,9 @@ async function autoremoveDeps() {
             setButtonLoading(btn, true, '执行清理');
             try {
                 await Service.Autoremove();
-                markCacheDirty('dashboard');
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                refreshDashboard();
+                // autoremove 可能移除孤立依赖：刷新磁盘占用 + 静默同步已安装列表
+                refreshDiskUsageSilent();
+                loadInstalledInBackground();
                 return '清理完成';
             } catch (err) {
                 throw new Error(`清理失败: ${err.message}`);
@@ -1448,10 +1500,9 @@ async function addTap() {
         await Service.AddTap(tap);
         showToast(`仓库 ${tap} 添加成功`, 'success');
         input.value = '';
-        markCacheDirty('taps');
-        tabCache.taps.data = null;
-        tabCache.taps.timestamp = 0;
-        loadTaps();
+        // 就地追加新仓库并静默后台同步（补齐描述等信息）
+        patchTaps('add', tap);
+        loadTapsInBackground();
     } catch (err) {
         showToast('添加仓库失败: ' + err.message, 'error');
     }
@@ -1466,10 +1517,9 @@ async function removeTap(tap) {
         async () => {
             try {
                 await Service.RemoveTap(tap);
-                markCacheDirty('taps');
-                tabCache.taps.data = null;
-                tabCache.taps.timestamp = 0;
-                loadTaps();
+                // 就地移除该仓库并静默后台同步
+                patchTaps('remove', tap);
+                loadTapsInBackground();
                 return `仓库 ${tap} 已移除`;
             } catch (err) {
                 throw new Error(`移除失败: ${err.message}`);
@@ -1573,13 +1623,13 @@ function renderServices(services) {
     if (!container) return;
 
     if (filtered.length === 0) {
-        container.innerHTML = services.length === 0
+        setListHTML(container, services.length === 0
             ? emptyStateHTML(SERVICE_ICON, '暂无服务', '当 Formula 提供后台守护进程（如 mysql、redis）时，这里会显示服务')
-            : emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的服务', '换个关键词试试');
+            : emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的服务', '换个关键词试试'));
         return;
     }
 
-    container.innerHTML = filtered.map(sv => {
+    setListHTML(container, filtered.map(sv => {
         const st = SERVICE_STATUS[sv.status] || SERVICE_STATUS.unknown;
         const iconCls = sv.status === 'started' ? 'pkg-icon-formula' : 'pkg-icon-cask';
         const running = sv.status === 'started';
@@ -1609,7 +1659,7 @@ function renderServices(services) {
                 </button>
             </div>
         </div>`;
-    }).join('');
+    }).join(''));
 }
 
 window.restartService = restartService;
@@ -1622,7 +1672,7 @@ async function restartService(name, btn) {
     try {
         await Service.RestartService(name);
         showToast(`服务 ${name} 已重启`, 'success');
-        reloadServices();
+        reloadServices(name, 'started');
     } catch (err) {
         actions.forEach(b => { b.disabled = false; });
         if (btn) btn.classList.remove('is-busy');
@@ -1631,18 +1681,10 @@ async function restartService(name, btn) {
     servicesBusy = false;
 }
 
-// After a service action, invalidate caches and reload the list
-function reloadServices() {
-    markCacheDirty('services');
-    tabCache.services.data = null;
-    tabCache.services.timestamp = 0;
-    setTimeout(() => {
-        if (currentTab === 'dashboard') {
-            refreshDashboard();
-        } else {
-            loadServices();
-        }
-    }, 400);
+// After a service action, patch the state in place and sync in the background
+function reloadServices(name, status) {
+    patchServices(name, status);
+    loadServicesInBackground();
 }
 
 // Dashboard quick-management preview: top services with inline icon buttons
@@ -1712,7 +1754,7 @@ async function toggleService(name, on) {
             await Service.StopService(name);
         }
         showToast(`服务 ${name} 已${on ? '启动' : '停止'}`, 'success');
-        reloadServices();
+        reloadServices(name, on ? 'started' : 'stopped');
     } catch (err) {
         actions.forEach(b => { b.disabled = false; });
         showToast(`${on ? '启动' : '停止'}失败: ${err.message}`, 'error');
@@ -1934,17 +1976,10 @@ window.runUpdateQuick = function() {
         async () => {
             try {
                 const result = await Service.UpdateWithOutput();
-                // Invalidate affected caches after a successful update
-                markCacheDirty('config');
-                markCacheDirty('dashboard');
-                markCacheDirty('outdated');
-                tabCache.config.data = null;
-                tabCache.config.timestamp = 0;
-                tabCache.dashboard.data = null;
-                tabCache.dashboard.timestamp = 0;
-                tabCache.outdated.data = null;
-                tabCache.outdated.timestamp = 0;
-                if (currentTab === 'dashboard') refreshDashboard();
+                // update 会改变 outdated / taps / 版本信息：静默后台刷新，不清缓存
+                loadOutdatedInBackground();
+                loadTapsInBackground();
+                loadInstalledInBackground();
                 return result.trim() || 'brew update 完成！';
             } catch (err) {
                 throw new Error(`更新失败: ${err.message}`);
@@ -2120,14 +2155,11 @@ async function togglePin(name, pinned) {
     } else {
         await pinPackage(name);
     }
-    // Refresh the installed list so the button state (锁定/解锁) updates
-    setTimeout(() => {
-        markCacheDirty('installed');
-        tabCache.installed.data = null;
-        tabCache.installed.timestamp = 0;
-        installedPackages = [];
-        loadInstalled(currentTab);
-    }, 300);
+    // 就地翻转锁定状态即可更新按钮，无需重取整个列表
+    patchInstalled(list => {
+        const pkg = list.find(p => p.name === name);
+        if (pkg) pkg.pinned = !pinned;
+    });
 }
 
 window.pinPackage = pinPackage;
