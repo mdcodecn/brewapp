@@ -1902,10 +1902,10 @@ function diskUsageHTML(disk) {
     return entries.map(([label, size]) => {
         const bytes = parseSize(size);
         const pct = total > 0 ? Math.round((bytes / total) * 100) : 0;
-        const barCls = label.includes('Cellar') ? 'disk-bar-box' : label.includes('Caskroom') ? 'disk-bar-app' : 'disk-bar-trash';
-        const iconCls = label.includes('Cellar') ? 'disk-icon-box' : label.includes('Caskroom') ? 'disk-icon-app' : 'disk-icon-trash';
-        const iconSvg = label.includes('Cellar') ? CELLAR_SVG : label.includes('Caskroom') ? CASK_SVG : CACHE_SVG;
-        return `<div class="disk-usage-item"><div class="disk-icon ${iconCls}">${iconSvg}</div><div class="disk-info"><div class="disk-line"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(size)}</span></div><div class="disk-bar"><div class="disk-bar-fill ${barCls}" style="width:${pct}%"></div></div></div></div>`;
+        const kind = label.includes('Cellar') ? 'box' : label.includes('Caskroom') ? 'app' : 'trash';
+        const iconSvg = kind === 'box' ? CELLAR_SVG : kind === 'app' ? CASK_SVG : CACHE_SVG;
+        const sub = kind === 'box' ? '软件包安装目录' : kind === 'app' ? '图形应用目录' : '下载缓存';
+        return `<div class="disk-usage-item"><div class="disk-icon disk-icon-${kind}">${iconSvg}</div><div class="disk-info"><div class="disk-line"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(size)}<span class="disk-pct">${pct}%</span></span></div><div class="sub">${sub}</div><div class="disk-bar"><div class="disk-bar-fill disk-bar-${kind}" style="width:${pct}%"></div></div></div></div>`;
     }).join('');
 }
 

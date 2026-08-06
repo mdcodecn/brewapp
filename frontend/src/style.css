@@ -452,6 +452,20 @@ body {
   color: #fff;
 }
 
+/* 配置页右上角 Homebrew 更新按钮 */
+.btn-update {
+  background: var(--success);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 9px;
+  font-weight: 600;
+}
+
+.btn-update:hover:not(:disabled) {
+  background: #2db64d;
+  transform: translateY(-1px);
+}
+
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
 }
@@ -654,7 +668,7 @@ body {
 /* ===== Dashboard Sections ===== */
 .dashboard-row {
   display: grid;
-  grid-template-columns: 1.15fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 14px;
   margin-bottom: 18px;
   align-items: stretch;
@@ -786,45 +800,70 @@ body {
 
 /* ===== Disk Usage ===== */
 .disk-usage-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 10px;
+  flex: 1;
+  min-height: 0;
 }
 
 .disk-usage-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 14px;
+  padding: 16px;
   background: var(--bg-primary);
-  border-radius: 12px;
-  transition: background-color 0.15s ease;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  transition: all 0.15s ease;
+  flex: 1;
 }
 
 .disk-usage-item:hover {
-  background-color: var(--bg-tertiary);
+  border-color: var(--accent-dim);
+  background: var(--bg-tertiary);
+  transform: translateY(-1px);
 }
 
 .disk-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
 }
 
-.disk-icon-box { background: var(--accent-dim); color: var(--accent); }
-.disk-icon-app { background: var(--success-dim); color: var(--success); }
-.disk-icon-trash { background: var(--warning-dim); color: var(--warning); }
+.disk-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.disk-icon-box {
+  background: linear-gradient(135deg, rgba(0, 113, 227, 0.16), rgba(0, 113, 227, 0.04));
+  color: var(--accent);
+  border: 1px solid rgba(0, 113, 227, 0.18);
+}
+
+.disk-icon-app {
+  background: linear-gradient(135deg, rgba(52, 199, 89, 0.16), rgba(52, 199, 89, 0.04));
+  color: var(--success);
+  border: 1px solid rgba(52, 199, 89, 0.18);
+}
+
+.disk-icon-trash {
+  background: linear-gradient(135deg, rgba(255, 149, 0, 0.16), rgba(255, 149, 0, 0.04));
+  color: var(--warning);
+  border: 1px solid rgba(255, 149, 0, 0.18);
+}
 
 .disk-info {
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 
 .disk-line {
@@ -836,37 +875,27 @@ body {
 
 .disk-usage-item .label {
   color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 13.5px;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .disk-usage-item .value {
-  color: var(--accent);
+  color: var(--text-primary);
   font-weight: 700;
-  font-size: 13px;
+  font-size: 13.5px;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
 }
 
-.disk-bar {
-  height: 5px;
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-  overflow: hidden;
+.disk-pct {
+  margin-left: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
 }
-
-.disk-bar-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.5s ease;
-}
-
-.disk-bar-box { background: var(--accent); }
-.disk-bar-app { background: var(--success); }
-.disk-bar-trash { background: var(--warning); }
 
 .disk-usage-item .sub {
   color: var(--text-muted);
@@ -875,6 +904,23 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.disk-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.disk-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+
+.disk-bar-box { background: linear-gradient(90deg, #0a84ff, #5ac8fa); }
+.disk-bar-app { background: linear-gradient(90deg, #30d158, #66d88b); }
+.disk-bar-trash { background: linear-gradient(90deg, #ff9500, #ffcc00); }
 
 .disk-empty {
   grid-column: 1 / -1;
@@ -1834,15 +1880,22 @@ body {
   display: grid;
   grid-template-columns: 1.35fr 1fr;
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
 }
 
-.config-main .settings-section:last-child {
-  margin-bottom: 0;
+.config-main,
+.config-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
 
+.config-main .settings-section:last-child,
 .config-side .settings-section:last-child {
   margin-bottom: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Total pill in the 磁盘占用 heading */
@@ -1863,6 +1916,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  flex: 1;
 }
 
 .config-action {
@@ -1871,6 +1925,7 @@ body {
   background: var(--bg-primary);
   border-radius: 12px;
   width: 100%;
+  flex: 1;
 }
 
 .config-action:hover {
@@ -1899,6 +1954,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1;
 }
 
 .config-inline-result {
