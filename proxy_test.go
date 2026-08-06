@@ -92,14 +92,17 @@ func TestApplyProxyEnv(t *testing.T) {
 // persisted config the toggle reads as enabled, and a corrupt file also
 // falls back to enabled.
 func TestProxyConfigDefaultEnabled(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("BREW_MANAGER_CONFIG_DIR", t.TempDir())
 	if !loadAppConfig().SystemProxyEnabled {
 		t.Error("proxy should default to enabled when no config file exists")
 	}
 
 	// Corrupt file → still defaults to enabled
-	if err := os.WriteFile(filepath.Join(dir, "brew-manager", "config.json"), []byte("{oops"), 0o644); err != nil {
+	cfgDir := filepath.Join(os.Getenv("BREW_MANAGER_CONFIG_DIR"), "brew-manager")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte("{oops"), 0o644); err != nil {
 		t.Fatalf("write corrupt config: %v", err)
 	}
 	if !loadAppConfig().SystemProxyEnabled {
@@ -107,7 +110,7 @@ func TestProxyConfigDefaultEnabled(t *testing.T) {
 	}
 
 	// Explicit false in the file still wins
-	if err := os.WriteFile(filepath.Join(dir, "brew-manager", "config.json"), []byte(`{"system_proxy_enabled": false}`), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.json"), []byte(`{"system_proxy_enabled": false}`), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 	if loadAppConfig().SystemProxyEnabled {
@@ -117,8 +120,7 @@ func TestProxyConfigDefaultEnabled(t *testing.T) {
 
 // TestProxyConfigRoundTrip verifies the toggle persists across save/load.
 func TestProxyConfigRoundTrip(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("BREW_MANAGER_CONFIG_DIR", t.TempDir())
 	if err := saveAppConfig(appConfig{SystemProxyEnabled: true}); err != nil {
 		t.Fatalf("save: %v", err)
 	}
