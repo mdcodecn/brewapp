@@ -47,12 +47,15 @@ type BrewService struct {
 
 // BrewSearchResult represents a search result from brew search
 type BrewSearchResult struct {
-	Name        string  `json:"name"`
-	Version     string  `json:"version"`
-	Description string  `json:"description"`
-	Type        string  `json:"type"`
-	Installed   bool    `json:"installed"`
-	Score       float64 `json:"score,omitempty"`
+	Name         string  `json:"name"`
+	Version      string  `json:"version"`
+	Description  string  `json:"description"`
+	Type         string  `json:"type"`
+	Installed    bool    `json:"installed"`
+	Score        float64 `json:"score,omitempty"`
+	Rank         int     `json:"rank,omitempty"`          // 推荐列表中的热度排名（1 起）
+	InstallCount string  `json:"install_count,omitempty"` // 30 天安装次数（原始字符串，如 "273,501"）
+	Percent      string  `json:"percent,omitempty"`       // 30 天安装占比（热度，如 "2.55"）
 }
 
 // Service handles all brew operations
@@ -930,13 +933,23 @@ const (
 
 	// recommendedFetchTimeout bounds each analytics download.
 	recommendedFetchTimeout = 30 * time.Second
+
+	// recommendedCacheVersion invalidates caches written by older builds when
+	// the analyticsItem payload shape changes (e.g. adding Percent). A cache
+	// whose version mismatches is treated as absent and re-fetched.
+	recommendedCacheVersion = 2
 )
 
 // analyticsItem is one entry of the analytics JSON: exactly one of Formula /
-// Cask is set depending on the endpoint.
+// Cask is set depending on the endpoint. Rank is the position in the ranking
+// (1-based), Count the raw install count string like "273,501" and Percent the
+// share of all installs (e.g. "2.55").
 type analyticsItem struct {
 	Formula string `json:"formula"`
 	Cask    string `json:"cask"`
+	Rank    int    `json:"number"`
+	Count   string `json:"count"`
+	Percent string `json:"percent"`
 }
 
 // analyticsJSON mirrors the top-level shape of the analytics endpoints.
@@ -945,7 +958,10 @@ type analyticsJSON struct {
 }
 
 // recommendedCache is the persisted analytics payload plus the fetch time.
+// Version guards against stale caches written by older builds: a mismatch
+// makes the cache invalid (re-fetched on next call).
 type recommendedCache struct {
+	Version   int             `json:"version"`
 	FetchedAt int64           `json:"fetched_at"`
 	Formula   []analyticsItem `json:"formula"`
 	Cask      []analyticsItem `json:"cask"`
@@ -1005,9 +1021,12 @@ func buildRecommendedResults(formulaItems, caskItems []analyticsItem, installedS
 			break
 		}
 		results = append(results, BrewSearchResult{
-			Name:      it.Cask,
-			Type:      "cask",
-			Installed: installedSet[it.Cask],
+			Name:         it.Cask,
+			Type:         "cask",
+			Installed:    installedSet[it.Cask],
+			Rank:         it.Rank,
+			InstallCount: it.Count,
+			Percent:      it.Percent,
 		})
 	}
 
@@ -1019,9 +1038,12 @@ func buildRecommendedResults(formulaItems, caskItems []analyticsItem, installedS
 			continue
 		}
 		results = append(results, BrewSearchResult{
-			Name:      it.Formula,
-			Type:      "formula",
-			Installed: installedSet[it.Formula],
+			Name:         it.Formula,
+			Type:         "formula",
+			Installed:    installedSet[it.Formula],
+			Rank:         it.Rank,
+			InstallCount: it.Count,
+			Percent:      it.Percent,
 		})
 	}
 
@@ -1042,8 +1064,8 @@ func recommendedCachePath() string {
 	return filepath.Join(dir, "brew-manager", "recommended.json")
 }
 
-// loadRecommendedCache reads the cached analytics payload; a missing or
-// corrupt file yields nil (caller then treats it as "no cache").
+// loadRecommendedCache reads the cached analytics payload; a missing, corrupt
+// or version-mismatched file yields nil (caller then treats it as "no cache").
 func loadRecommendedCache() *recommendedCache {
 	data, err := os.ReadFile(recommendedCachePath())
 	if err != nil {
@@ -1053,12 +1075,16 @@ func loadRecommendedCache() *recommendedCache {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return nil
 	}
+	if c.Version != recommendedCacheVersion {
+		return nil
+	}
 	return &c
 }
 
 // saveRecommendedCache persists the analytics payload for the next visits.
 func saveRecommendedCache(formulaItems, caskItems []analyticsItem) error {
 	data, err := json.Marshal(recommendedCache{
+		Version:   recommendedCacheVersion,
 		FetchedAt: time.Now().Unix(),
 		Formula:   formulaItems,
 		Cask:      caskItems,
@@ -1100,10 +1126,13 @@ func fetchAnalytics(url string) ([]analyticsItem, error) {
 
 // recommendedAnalytics returns the two analytics lists, preferring a fresh
 // on-disk cache and falling back to a stale one (or a partial fetch) when the
-// network is unavailable, so the search page keeps working offline.
-func (s *Service) recommendedAnalytics() (formulaItems, caskItems []analyticsItem, err error) {
-	if c := loadRecommendedCache(); c != nil && time.Since(time.Unix(c.FetchedAt, 0)) < recommendedCacheTTL {
-		return c.Formula, c.Cask, nil
+// network is unavailable, so the search page keeps working offline. force
+// bypasses the fresh-cache check (used by the UI refresh button).
+func (s *Service) recommendedAnalytics(force bool) (formulaItems, caskItems []analyticsItem, err error) {
+	if !force {
+		if c := loadRecommendedCache(); c != nil && time.Since(time.Unix(c.FetchedAt, 0)) < recommendedCacheTTL {
+			return c.Formula, c.Cask, nil
+		}
 	}
 
 	var fErr, cErr error
@@ -1138,9 +1167,10 @@ func (s *Service) recommendedAnalytics() (formulaItems, caskItems []analyticsIte
 
 // GetRecommended returns a short list of popular packages from Homebrew's
 // official 30-day install analytics, used by the search page to offer
-// one-click installs before the user types anything.
-func (s *Service) GetRecommended() ([]BrewSearchResult, error) {
-	formulaItems, caskItems, err := s.recommendedAnalytics()
+// one-click installs before the user types anything. force bypasses the disk
+// cache so the UI refresh button always pulls the latest ranking.
+func (s *Service) GetRecommended(force bool) ([]BrewSearchResult, error) {
+	formulaItems, caskItems, err := s.recommendedAnalytics(force)
 	if err != nil {
 		return nil, err
 	}

@@ -1178,6 +1178,84 @@ async function doSearch(query) {
 let recommendedCache = null;
 let recommendedLoading = false;
 
+// 把 "273,501" 之类的安装次数转成易读格式："27.4万次安装" / "5,432次安装"
+function formatInstallCount(raw) {
+    const n = parseInt(String(raw).replace(/,/g, ''), 10);
+    if (!n) return '';
+    if (n >= 10000) {
+        const w = (n / 10000).toFixed(1).replace(/\.0$/, '');
+        return `${w}万次安装`;
+    }
+    return `${n.toLocaleString()}次安装`;
+}
+
+// 推荐卡片：照搬镜像源卡片结构——左侧渐变缩写徽章 + 中间信息列 + 右侧操作。
+// 已安装时右侧只显示绿色对勾（仿 mirror-check），不再堆详情按钮。
+// maxPercent 为该类型榜单内的最大安装占比，用于把热度条归一化到组内对比。
+const RECOMMEND_CHECK_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
+function recommendCardHTML(r, maxPercent) {
+    const count = r.installCount ? formatInstallCount(r.installCount) : '';
+    const pct = parseFloat(r.percent);
+    const heatText = pct > 0 ? pct.toFixed(2).replace(/\.?0+$/, '') + '%' : '';
+    const heatWidth = maxPercent > 0 && pct > 0 ? Math.max(8, Math.round((pct / maxPercent) * 100)) : 0;
+    const initial = (r.name[0] || '?').toUpperCase();
+    const hot = r.rank && r.rank <= 3;
+    return `
+        <div class="recommend-card">
+            <div class="recommend-badge recommend-badge-${r.type}">${escapeHtml(initial)}</div>
+            <div class="recommend-info">
+                <div class="recommend-name"><span class="recommend-name-text" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>
+                    ${r.rank ? `<span class="recommend-rank-tag${hot ? ' recommend-rank-tag-hot' : ''}">TOP${r.rank}</span>` : ''}
+                </div>
+                ${heatText ? `
+                <div class="recommend-heat" title="30 天安装占比">
+                    <div class="recommend-heat-bar"><div class="recommend-heat-fill${hot ? ' recommend-heat-fill-hot' : ''}" style="width:${heatWidth}%"></div></div>
+                    <span class="recommend-heat-label">热度 ${heatText}</span>
+                </div>` : ''}
+                ${count ? `<div class="recommend-count">${count}</div>` : ''}
+            </div>
+            <div class="recommend-side">
+                ${r.installed
+                    ? `<span class="recommend-check" title="已安装">${RECOMMEND_CHECK_SVG}</span>`
+                    : `<button class="btn btn-sm btn-primary" onclick="installPackage('${escapeHtml(r.name)}', '${r.type}')">安装</button>`}
+            </div>
+        </div>
+    `;
+}
+
+// 推荐区块标题：与配置页 settings-heading 完全一致（15px + section-icon）。
+// withRefresh 时在标题右侧放「刷新」按钮（仿镜像源测速按钮位置）。
+const RECOMMEND_TITLE_ICON = '<svg class="section-icon" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>';
+const RECOMMEND_REFRESH_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+
+// 推荐分组容器：复刻配置页 settings-section（白框）+ settings-heading
+function recommendSectionHTML(title, innerHTML, withRefresh) {
+    const actions = withRefresh
+        ? `<span class="heading-actions"><button class="btn btn-secondary btn-sm" onclick="refreshRecommended()" title="重新获取热门排行">${RECOMMEND_REFRESH_SVG}刷新</button></span>`
+        : '';
+    return `
+        <div class="settings-section recommend-section">
+            <h2 class="settings-heading">${RECOMMEND_TITLE_ICON}${title}${actions}</h2>
+            ${innerHTML}
+        </div>`;
+}
+
+// 推荐加载骨架屏：两个独立白框（热门应用 / 热门命令行），灰底子卡片
+function recommendSkeletonHTML() {
+    const card = () => `
+        <div class="recommend-skeleton-card">
+            <div class="recommend-skeleton-badge"></div>
+            <div class="recommend-skeleton-lines">
+                <div class="recommend-skeleton-line" style="width:55%"></div>
+                <div class="recommend-skeleton-line" style="width:80%"></div>
+                <div class="recommend-skeleton-line" style="width:35%"></div>
+            </div>
+        </div>`;
+    const grid = `<div class="recommend-grid">${card()}${card()}${card()}${card()}</div>`;
+    return recommendSectionHTML('热门应用', grid) + recommendSectionHTML('热门命令行', grid);
+}
+
 async function loadRecommended(force) {
     const panel = document.getElementById('recommended-panel');
     if (!panel) return;
@@ -1188,19 +1266,37 @@ async function loadRecommended(force) {
     }
 
     recommendedLoading = true;
-    panel.innerHTML = '<div class="loading-state"><span class="spinner"></span> 正在获取热门软件…</div>';
+    panel.innerHTML = recommendSkeletonHTML();
     try {
-        const items = await Service.GetRecommended();
+        const items = await Service.GetRecommended(force);
         recommendedCache = items;
         renderRecommended(items);
     } catch (err) {
-        panel.innerHTML = `<div class="empty-state">获取推荐失败: ${escapeHtml(err.message)}</div>`;
+        panel.innerHTML = recommendSectionHTML('热门推荐', `<div class="empty-state">获取推荐失败: ${escapeHtml(err.message)}</div>`);
     } finally {
         recommendedLoading = false;
     }
 }
 
-// 渲染推荐列表：按类型分组展示，已安装状态与本地已装列表对齐
+// 手动刷新推荐排行：绕过磁盘缓存直接重新拉取
+window.refreshRecommended = async function() {
+    const panel = document.getElementById('recommended-panel');
+    if (!panel) return;
+    recommendedLoading = true;
+    panel.innerHTML = recommendSkeletonHTML();
+    try {
+        const items = await Service.GetRecommended(true);
+        recommendedCache = items;
+        renderRecommended(items);
+        showToast('推荐列表已更新', 'success');
+    } catch (err) {
+        panel.innerHTML = recommendSectionHTML('热门推荐', `<div class="empty-state">刷新失败: ${escapeHtml(err.message)}</div>`);
+    } finally {
+        recommendedLoading = false;
+    }
+};
+
+// 渲染推荐列表：应用与命令行分开成两个独立白框（复刻配置页镜像源区块）
 function renderRecommended(items) {
     const panel = document.getElementById('recommended-panel');
     if (!panel || !items || items.length === 0) return;
@@ -1213,9 +1309,21 @@ function renderRecommended(items) {
 
     const casks = itemsWithStatus.filter(r => r.type === 'cask');
     const formulae = itemsWithStatus.filter(r => r.type === 'formula');
-    panel.innerHTML =
-        (casks.length ? `<div class="recommend-group-title">热门应用</div>` + casks.map(searchResultItemHTML).join('') : '')
-        + (formulae.length ? `<div class="recommend-group-title">热门命令行</div>` + formulae.map(searchResultItemHTML).join('') : '');
+
+    // 每组按组内最大安装占比归一化热度条，使条长在组内可比
+    const renderGroup = group => {
+        const maxPercent = Math.max(...group.map(r => parseFloat(r.percent) || 0), 0.001);
+        return group.map(r => recommendCardHTML(r, maxPercent)).join('');
+    };
+
+    // 「刷新」按钮只放在第一个存在的区块标题右侧（cask 为空时归 formula）
+    const casksHTML = casks.length
+        ? recommendSectionHTML('热门应用', `<div class="recommend-grid">${renderGroup(casks)}</div>`, true)
+        : '';
+    const formulaeHTML = formulae.length
+        ? recommendSectionHTML('热门命令行', `<div class="recommend-grid">${renderGroup(formulae)}</div>`, !casks.length)
+        : '';
+    panel.innerHTML = casksHTML + formulaeHTML;
 }
 
 window.debounceSearch = function() {

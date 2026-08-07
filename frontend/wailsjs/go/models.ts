@@ -55,6 +55,9 @@ export namespace main {
 	    type: string;
 	    installed: boolean;
 	    score?: number;
+	    rank?: number;
+	    install_count?: string;
+	    percent?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new BrewSearchResult(source);
@@ -68,6 +71,9 @@ export namespace main {
 	        this.type = source["type"];
 	        this.installed = source["installed"];
 	        this.score = source["score"];
+	        this.rank = source["rank"];
+	        this.install_count = source["install_count"];
+	        this.percent = source["percent"];
 	    }
 	}
 	export class BrewService {

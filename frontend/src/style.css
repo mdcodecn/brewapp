@@ -1264,21 +1264,7 @@ body {
   background-color: var(--accent-dim);
 }
 
-.search-input-lg {
-  width: 100%;
-  padding: 12px 16px 12px 42px;
-  font-size: 15px;
-  background-position: 14px center;
-  background-size: 17px;
-  border-radius: 10px;
-}
-
 /* ===== Search Page ===== */
-.search-page .search-input-lg {
-  background-color: var(--bg-secondary);
-  margin-bottom: 18px;
-}
-
 /* ===== Search Results ===== */
 .results-list {
   display: flex;
@@ -1399,22 +1385,194 @@ body {
 }
 
 /* ===== Recommended installs (search page, empty query) ===== */
+/* 复刻配置页镜像源区块：两个独立 settings-section 白框，内部灰色 mirror-card 子卡片。
+   settings-section / settings-heading 的间距、字号直接复用配置页类。 */
 .recommended-panel {
+  display: block;
+}
+
+/* 自适应列数网格（与 mirror-grid 一致） */
+.recommend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(235px, 1fr));
+  gap: 12px;
+}
+
+/* 卡片：灰色子项，与 mirror-card 相同的结构与 hover 反馈 */
+.recommend-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  border: 1.5px solid transparent;
+  border-radius: 12px;
+  transition: all 0.15s ease;
+  min-width: 0;
+}
+
+.recommend-card:hover {
+  transform: translateY(-1px);
+  border-color: var(--accent-dim);
+  background: var(--bg-tertiary);
+}
+
+/* 渐变缩写徽章（与 mirror-badge 一致） */
+.recommend-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.recommend-badge-cask {
+  background: linear-gradient(135deg, #0071e3, #5ac8fa);
+}
+
+.recommend-badge-formula {
+  background: linear-gradient(135deg, #34c759, #88d86c);
+}
+
+.recommend-info {
+  min-width: 0;
+  flex: 1;
+}
+
+/* 名称行：与 mirror-name 一致，长包名可截断且不挤压右侧徽章 */
+.recommend-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.recommend-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* TOP 排名胶囊：实心样式，与 mirror-current-tag 一致；前三名暖色 */
+.recommend-rank-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.recommend-rank-tag-hot {
+  background: var(--warning);
+}
+
+/* 热度行：迷你热度条（组内归一化）+ 占比，比纯文字更直观 */
+.recommend-heat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.recommend-heat-bar {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.recommend-heat-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+
+/* 前三名热度条用暖色，与 TOP 徽章呼应 */
+.recommend-heat-fill-hot {
+  background: var(--warning);
+}
+
+.recommend-heat-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 安装次数行：与 mirror-url 一致（等宽小字） */
+.recommend-count {
+  margin-top: 2px;
+  font-family: 'SF Mono', 'Fira Code', Menlo, monospace;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 右侧区域：未安装显示安装按钮，已安装只显示绿色对勾（仿 mirror-check） */
+.recommend-side {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 62px;
+}
+
+.recommend-check {
+  display: flex;
+  align-items: center;
+  color: var(--success);
+}
+
+/* 推荐加载骨架屏（横向卡片，灰底子项） */
+.recommend-skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  border-radius: 12px;
+}
+
+.recommend-skeleton-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--bg-tertiary);
+  flex-shrink: 0;
+}
+
+.recommend-skeleton-lines {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.recommend-group-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-muted);
-  letter-spacing: 0.4px;
-  margin: 12px 2px 2px;
+.recommend-skeleton-line {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
 }
 
-.recommend-group-title:first-child {
-  margin-top: 2px;
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
 }
 
 /* ===== Settings Section ===== */
