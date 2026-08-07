@@ -256,6 +256,20 @@ export namespace main {
 	        this.depends_on = source["depends_on"];
 	    }
 	}
+	export class RemoveTapsResult {
+	    removed: number;
+	    failed: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new RemoveTapsResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.removed = source["removed"];
+	        this.failed = source["failed"];
+	    }
+	}
 	export class SearchResponse {
 	    results: BrewSearchResult[];
 	    warnings: string[];

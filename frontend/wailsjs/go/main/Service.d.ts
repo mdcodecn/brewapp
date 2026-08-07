@@ -54,6 +54,8 @@ export function Reinstall(arg1:string,arg2:string):Promise<void>;
 
 export function RemoveTap(arg1:string):Promise<void>;
 
+export function RemoveTaps(arg1:Array<string>):Promise<main.RemoveTapsResult>;
+
 export function ResetBrewDetection():Promise<void>;
 
 export function RestartService(arg1:string):Promise<void>;

@@ -106,6 +106,10 @@ export function RemoveTap(arg1) {
   return window['go']['main']['Service']['RemoveTap'](arg1);
 }
 
+export function RemoveTaps(arg1) {
+  return window['go']['main']['Service']['RemoveTaps'](arg1);
+}
+
 export function ResetBrewDetection() {
   return window['go']['main']['Service']['ResetBrewDetection']();
 }

@@ -165,6 +165,50 @@ function closeModal() {
     if (modalEl) modalEl.className = 'modal';
 }
 
+// ===== 弹窗键盘快捷键 =====
+// 所有弹窗统一支持：Enter 触发主操作（确认），Esc 取消/关闭。
+// 优先级：确认弹窗 > 详情弹窗 > Homebrew 缺失提示。
+document.addEventListener('keydown', (e) => {
+    const isVisible = (id) => {
+        const el = document.getElementById(id);
+        return el && el.style.display !== 'none';
+    };
+
+    // 确认弹窗：Enter 触发"确认"，Esc 取消（等价于点击"取消"按钮）
+    if (isVisible('modal-overlay')) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeModal();
+        } else if (e.key === 'Enter') {
+            // 阻止焦点落在"取消"按钮时按 Enter 误触发取消，统一走确认按钮
+            e.preventDefault();
+            const confirmBtn = document.getElementById('modal-confirm');
+            if (confirmBtn) confirmBtn.click();
+        }
+        return;
+    }
+
+    // 详情弹窗（纯信息展示，无确认/取消按钮）：Enter 与 Esc 均视为关闭
+    if (isVisible('detail-modal-overlay')) {
+        if (e.key === 'Escape' || e.key === 'Enter') {
+            e.preventDefault();
+            closeDetailModal();
+        }
+        return;
+    }
+
+    // Homebrew 缺失提示：Enter 触发主操作（前往安装），Esc 关闭
+    if (isVisible('brew-missing-overlay')) {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            hideBrewMissing();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            window.openBrewSite();
+        }
+    }
+});
+
 // ===== Package Detail Modal =====
 
 window.showDetailModal = showDetailModal;
@@ -276,11 +320,14 @@ let installedLoaded = false;
 // without waiting for the slower outdated check
 (async () => {
     try {
-        const [taps, trust] = await Promise.all([
+        const [taps, trust, unused] = await Promise.all([
             Service.GetTaps(),
             Service.GetTrustInfo().catch(() => ({ supported: false, taps: [] })),
+            // 自动检测未使用仓库，仓库列表据此标记并排序
+            Service.CheckUnusedTaps().catch(() => []),
         ]);
         cachedTrustInfo = trust || { supported: false, taps: [] };
+        cachedUnusedTaps = unused || [];
         tabCache.taps.data = taps;
         tabCache.taps.timestamp = Date.now();
         updateTapBadge(taps.length);
@@ -1429,6 +1476,9 @@ async function autoremoveDeps() {
 // ===== 仓库管理 =====
 // Trust info (Homebrew 6+ `brew trust`) cached alongside the tap list
 let cachedTrustInfo = { supported: false, taps: [] };
+// 未使用仓库缓存：没有安装任何包的仓库名数组，加载仓库列表时自动检测。
+// 未使用仓库在列表中排到后面，并带上「未使用」徽标。
+let cachedUnusedTaps = [];
 
 async function loadTaps() {
     if (isCacheValid(tabCache.taps)) {
@@ -1437,9 +1487,14 @@ async function loadTaps() {
     }
 
     try {
-        const taps = await Service.GetTaps();
+        // 并行获取仓库列表与未使用检测，一次渲染避免列表闪烁
+        const [taps, unused] = await Promise.all([
+            Service.GetTaps(),
+            Service.CheckUnusedTaps().catch(() => []),
+        ]);
         tabCache.taps.data = taps;
         tabCache.taps.timestamp = Date.now();
+        cachedUnusedTaps = unused || [];
         // Render immediately; trust status fills in asynchronously
         renderTaps(taps, cachedTrustInfo);
         loadTrustInfo();
@@ -1450,9 +1505,13 @@ async function loadTaps() {
 
 async function loadTapsInBackground() {
     try {
-        const taps = await Service.GetTaps();
+        const [taps, unused] = await Promise.all([
+            Service.GetTaps(),
+            Service.CheckUnusedTaps().catch(() => []),
+        ]);
         tabCache.taps.data = taps;
         tabCache.taps.timestamp = Date.now();
+        cachedUnusedTaps = unused || [];
         if (currentTab === 'taps') {
             renderTaps(taps, cachedTrustInfo);
         }
@@ -1485,9 +1544,6 @@ function updateTapBadge(count) {
     }
 }
 
-// 检查未使用仓库的结果缓存：未使用仓库名数组；null 表示尚未检查过。
-let cachedUnusedTaps = null;
-
 function renderTaps(taps, trustInfo) {
     // Update sidebar badge
     updateTapBadge(taps.length);
@@ -1496,8 +1552,19 @@ function renderTaps(taps, trustInfo) {
     const trustedSet = new Set((trustInfo && trustInfo.taps) || []);
     const unusedSet = new Set(cachedUnusedTaps || []);
 
+    // 有未使用仓库时才显示「清理未使用」按钮
+    const cleanBtn = document.getElementById('clean-unused-btn');
+    if (cleanBtn) cleanBtn.style.display = unusedSet.size > 0 ? '' : 'none';
+
+    // 未使用的仓库排到列表后面（排序稳定，保持原相对顺序）
+    const sortedTaps = [...taps].sort((a, b) => {
+        const au = unusedSet.has(a.split(' ')[0]) ? 1 : 0;
+        const bu = unusedSet.has(b.split(' ')[0]) ? 1 : 0;
+        return au - bu;
+    });
+
     document.getElementById('taps-list').innerHTML = taps.length > 0
-        ? taps.map(t => {
+        ? sortedTaps.map(t => {
             const tapName = t.split(' ')[0];
             const rest = t.slice(tapName.length).trim();
             const trusted = trustedSet.has(tapName);
@@ -1525,26 +1592,42 @@ function renderTaps(taps, trustInfo) {
         : emptyStateHTML(TAP_ICON, '暂无仓库', '在上方输入仓库名称添加，如 homebrew/cask');
 }
 
-// 检查没有安装任何包（formula/cask）的仓库，即「未使用」仓库，可放心移除。
-window.checkUnusedTaps = checkUnusedTaps;
-async function checkUnusedTaps() {
-    const btn = document.getElementById('check-unused-btn');
-    if (btn) setButtonLoading(btn, true, '检查中');
-    try {
-        const unused = await Service.CheckUnusedTaps();
-        cachedUnusedTaps = unused;
-        if (currentTab === 'taps') {
-            renderTaps(tabCache.taps.data || [], cachedTrustInfo);
-        }
-        if (unused.length === 0) {
-            showToast('所有仓库都在使用中，没有未使用的仓库', 'success');
-        } else {
-            showToast(`发现 ${unused.length} 个未使用的仓库，已标记「未使用」，可放心移除`, 'info');
-        }
-    } catch (err) {
-        showToast('检查失败: ' + err.message, 'error');
+// 一键清理所有未使用仓库（没有安装任何包的仓库）。
+// 逐个串行移除并实时显示进度；部分失败不影响其余仓库。
+window.cleanUnusedTaps = cleanUnusedTaps;
+async function cleanUnusedTaps() {
+    const unused = cachedUnusedTaps || [];
+    if (unused.length === 0) {
+        showToast('没有未使用的仓库', 'info');
+        return;
     }
-    if (btn) setButtonLoading(btn, false, '检查未使用');
+    showModalLoading(
+        '清理未使用仓库',
+        `将移除 <strong>${unused.length}</strong> 个未安装任何包的仓库：<br>` +
+        `<code>${unused.map(escapeHtml).join('</code>、<code>')}</code><br><br>下方将实时显示清理进度。`,
+        async () => {
+            try {
+                const res = await Service.RemoveTaps(unused);
+                // 一次性就地移除已清理的仓库（避免逐个 patchTaps 反复重渲染）
+                cachedUnusedTaps = [];
+                const removedSet = new Set(unused);
+                const kept = (tabCache.taps.data || []).filter(t => !removedSet.has(t.split(' ')[0]));
+                tabCache.taps.data = kept;
+                tabCache.taps.timestamp = Date.now();
+                if (tabCache.dashboard.data) tabCache.dashboard.data.taps = kept;
+                if (currentTab === 'taps') renderTaps(kept, cachedTrustInfo);
+                // 后台重新拉取列表并重检测未使用
+                loadTapsInBackground();
+                return res.failed > 0
+                    ? { type: 'error', message: `已清理 ${res.removed} 个仓库，${res.failed} 个失败` }
+                    : { type: 'success', message: `已清理 ${res.removed} 个未使用仓库` };
+            } catch (err) {
+                throw new Error(`清理失败: ${err.message}`);
+            }
+        },
+        'modal-lg',
+        'untap-batch'
+    );
 }
 
 // Toggle a tap's trust state with immediate effect; failures roll the

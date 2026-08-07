@@ -1512,8 +1512,8 @@ body {
   font-weight: 600;
   line-height: 1.6;
   vertical-align: middle;
-  background: var(--danger-dim);
-  color: var(--danger);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
 }
 
 .tap-desc {

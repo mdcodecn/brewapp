@@ -1462,6 +1462,34 @@ func (s *Service) RemoveTap(tap string) error {
 	return nil
 }
 
+// RemoveTapsResult 报告批量移除仓库的结果（一键清理未使用仓库）。
+// Removed 为成功移除数，Failed 为失败数。
+type RemoveTapsResult struct {
+	Removed int `json:"removed"`
+	Failed  int `json:"failed"`
+}
+
+// RemoveTaps 批量移除多个仓库，逐个串行 untap，某个仓库失败不中断其余；
+// 每步通过 untap-batch 进度流反馈到前端。
+func (s *Service) RemoveTaps(taps []string) (RemoveTapsResult, error) {
+	result := RemoveTapsResult{}
+	op := "untap-batch"
+	for i, tap := range taps {
+		s.emitBrewEvent(op, brewEventLine, fmt.Sprintf("▶ 正在移除 %s（%d/%d）...", tap, i+1, len(taps)), false, "")
+		if _, err := s.runBrew("untap", tap); err != nil {
+			result.Failed++
+			s.emitBrewEvent(op, brewEventLine, fmt.Sprintf("✗ %s 移除失败：%v", tap, err), false, "")
+			continue
+		}
+		result.Removed++
+		s.emitBrewEvent(op, brewEventLine, fmt.Sprintf("✓ %s 已移除", tap), false, "")
+	}
+	if result.Removed == 0 && result.Failed > 0 {
+		return result, fmt.Errorf("全部 %d 个仓库移除失败", result.Failed)
+	}
+	return result, nil
+}
+
 // UpdateWithOutput runs brew update and streams its output live, so the UI
 // can show fetch progress instead of waiting for the whole command to finish.
 func (s *Service) UpdateWithOutput() (string, error) {
