@@ -26,6 +26,8 @@ export function GetOutdated():Promise<Array<main.BrewPackage>>;
 
 export function GetPackageDetail(arg1:string,arg2:string):Promise<main.PackageDetail>;
 
+export function GetRecommended():Promise<Array<main.BrewSearchResult>>;
+
 export function GetSystemProxy():Promise<main.SystemProxyStatus>;
 
 export function GetTaps():Promise<Array<string>>;

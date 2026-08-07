@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -903,6 +905,252 @@ func (s *Service) searchCasks(query string, installedSet map[string]bool) ([]Bre
 		results = append(results, result)
 	}
 
+	return results, nil
+}
+
+// ===== Recommended installs (search page) =====
+//
+// The search page shows a "推荐安装" list while the input is empty. The list
+// comes from Homebrew's official 30-day install analytics so it reflects what
+// users actually install, and is cached on disk for a few hours to avoid
+// re-downloading the multi-MB analytics payload on every visit.
+
+const (
+	// formulaAnalyticsURL / caskAnalyticsURL are Homebrew's official analytics
+	// endpoints: a ranked list of the most-installed formulae/casks in the
+	// last 30 days (sorted by count, descending).
+	formulaAnalyticsURL = "https://formulae.brew.sh/api/analytics/install/30d.json"
+	caskAnalyticsURL    = "https://formulae.brew.sh/api/analytics/cask-install/30d.json"
+
+	// recommendedPerKind is how many items we keep from each category.
+	recommendedPerKind = 6
+
+	// recommendedCacheTTL bounds how long the analytics payload is reused.
+	recommendedCacheTTL = 6 * time.Hour
+
+	// recommendedFetchTimeout bounds each analytics download.
+	recommendedFetchTimeout = 30 * time.Second
+)
+
+// analyticsItem is one entry of the analytics JSON: exactly one of Formula /
+// Cask is set depending on the endpoint.
+type analyticsItem struct {
+	Formula string `json:"formula"`
+	Cask    string `json:"cask"`
+}
+
+// analyticsJSON mirrors the top-level shape of the analytics endpoints.
+type analyticsJSON struct {
+	Items []analyticsItem `json:"items"`
+}
+
+// recommendedCache is the persisted analytics payload plus the fetch time.
+type recommendedCache struct {
+	FetchedAt int64           `json:"fetched_at"`
+	Formula   []analyticsItem `json:"formula"`
+	Cask      []analyticsItem `json:"cask"`
+}
+
+// recommendedFormulaBlacklist lists well-known build/runtime dependencies that
+// dominate the formula install ranking but are rarely what a user wants to
+// install directly (they come along with other packages).
+var recommendedFormulaBlacklist = map[string]bool{
+	"autoconf": true, "automake": true, "brotli": true, "bubblewrap": true,
+	"bzip2": true, "ca-certificates": true, "expat": true, "fontconfig": true,
+	"freetype": true, "gdbm": true, "gdk-pixbuf": true, "gettext": true,
+	"glib": true, "glibc": true, "gmp": true, "harfbuzz": true, "icu4c": true,
+	"jpeg": true, "json-c": true, "krb5": true, "libcap": true, "libevent": true,
+	"libffi": true, "libgcrypt": true, "libgpg-error": true, "libidn2": true,
+	"libjpeg-turbo": true, "libpng": true, "libsodium": true, "libtasn1": true,
+	"libtiff": true, "libtool": true, "libunistring": true, "libxml2": true,
+	"libyaml": true, "libzip": true, "lzo": true, "m4": true, "ncurses": true,
+	"nettle": true, "oniguruma": true, "openssl": true, "p11-kit": true,
+	"pcre": true, "pcre2": true, "pkg-config": true, "pkgconf": true,
+	"readline": true, "snappy": true, "sqlite": true, "unbound": true,
+	"utf8proc": true, "xz": true, "zstd": true,
+}
+
+// versionedFormulaRe matches names with an explicit version suffix such as
+// openssl@3 or python@3.14. Those are almost always dependency pins or legacy
+// tools, not what a fresh-install recommendation should push.
+var versionedFormulaRe = regexp.MustCompile(`@\d`)
+
+// isRecommendedFormula reports whether a formula is worth recommending: pure
+// dependency packages (blacklist) and version-pinned builds are excluded.
+func isRecommendedFormula(name string) bool {
+	if recommendedFormulaBlacklist[name] {
+		return true
+	}
+	return versionedFormulaRe.MatchString(name)
+}
+
+// parseAnalyticsJSON decodes the analytics endpoint payload into its item list.
+func parseAnalyticsJSON(data []byte) ([]analyticsItem, error) {
+	var parsed analyticsJSON
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return nil, err
+	}
+	return parsed.Items, nil
+}
+
+// buildRecommendedResults turns the raw analytics items into the search-page
+// result list: the top recommendedPerKind casks followed by the top
+// recommendedPerKind formulae (after dependency filtering), each marked with
+// its install state.
+func buildRecommendedResults(formulaItems, caskItems []analyticsItem, installedSet map[string]bool) []BrewSearchResult {
+	results := make([]BrewSearchResult, 0, recommendedPerKind*2)
+
+	for _, it := range caskItems {
+		if len(results) >= recommendedPerKind {
+			break
+		}
+		results = append(results, BrewSearchResult{
+			Name:      it.Cask,
+			Type:      "cask",
+			Installed: installedSet[it.Cask],
+		})
+	}
+
+	for _, it := range formulaItems {
+		if len(results) >= recommendedPerKind*2 {
+			break
+		}
+		if isRecommendedFormula(it.Formula) {
+			continue
+		}
+		results = append(results, BrewSearchResult{
+			Name:      it.Formula,
+			Type:      "formula",
+			Installed: installedSet[it.Formula],
+		})
+	}
+
+	return results
+}
+
+// recommendedCachePath returns where the analytics payload is cached
+// (~/Library/Application Support/brew-manager/recommended.json on macOS;
+// BREW_MANAGER_CONFIG_DIR overrides the base dir in tests).
+func recommendedCachePath() string {
+	if dir := os.Getenv("BREW_MANAGER_CONFIG_DIR"); dir != "" {
+		return filepath.Join(dir, "brew-manager", "recommended.json")
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		dir = os.Getenv("HOME")
+	}
+	return filepath.Join(dir, "brew-manager", "recommended.json")
+}
+
+// loadRecommendedCache reads the cached analytics payload; a missing or
+// corrupt file yields nil (caller then treats it as "no cache").
+func loadRecommendedCache() *recommendedCache {
+	data, err := os.ReadFile(recommendedCachePath())
+	if err != nil {
+		return nil
+	}
+	var c recommendedCache
+	if err := json.Unmarshal(data, &c); err != nil {
+		return nil
+	}
+	return &c
+}
+
+// saveRecommendedCache persists the analytics payload for the next visits.
+func saveRecommendedCache(formulaItems, caskItems []analyticsItem) error {
+	data, err := json.Marshal(recommendedCache{
+		FetchedAt: time.Now().Unix(),
+		Formula:   formulaItems,
+		Cask:      caskItems,
+	})
+	if err != nil {
+		return err
+	}
+	path := recommendedCachePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o644)
+}
+
+// fetchAnalytics downloads and parses one analytics endpoint. Mirror/UA notes:
+// the endpoint answers fine with a plain Go client; curl UA is used for parity
+// with the mirror speed tests and to avoid any UA-based throttling.
+func fetchAnalytics(url string) ([]analyticsItem, error) {
+	client := &http.Client{Timeout: recommendedFetchTimeout}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "curl/8.4.0")
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("analytics 接口返回 HTTP %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return parseAnalyticsJSON(body)
+}
+
+// recommendedAnalytics returns the two analytics lists, preferring a fresh
+// on-disk cache and falling back to a stale one (or a partial fetch) when the
+// network is unavailable, so the search page keeps working offline.
+func (s *Service) recommendedAnalytics() (formulaItems, caskItems []analyticsItem, err error) {
+	if c := loadRecommendedCache(); c != nil && time.Since(time.Unix(c.FetchedAt, 0)) < recommendedCacheTTL {
+		return c.Formula, c.Cask, nil
+	}
+
+	var fErr, cErr error
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		formulaItems, fErr = fetchAnalytics(formulaAnalyticsURL)
+	}()
+	go func() {
+		defer wg.Done()
+		caskItems, cErr = fetchAnalytics(caskAnalyticsURL)
+	}()
+	wg.Wait()
+
+	if fErr == nil && cErr == nil {
+		saveRecommendedCache(formulaItems, caskItems)
+		return formulaItems, caskItems, nil
+	}
+
+	// 部分或全部拉取失败：退回已有缓存（即使已过期），保证离线可用。
+	if c := loadRecommendedCache(); c != nil {
+		return c.Formula, c.Cask, nil
+	}
+
+	// 两个接口都失败且无缓存，才把错误抛给前端。
+	if fErr != nil && cErr != nil {
+		return nil, nil, fmt.Errorf("获取热门软件失败：%v；%v", fErr, cErr)
+	}
+	return formulaItems, caskItems, nil
+}
+
+// GetRecommended returns a short list of popular packages from Homebrew's
+// official 30-day install analytics, used by the search page to offer
+// one-click installs before the user types anything.
+func (s *Service) GetRecommended() ([]BrewSearchResult, error) {
+	formulaItems, caskItems, err := s.recommendedAnalytics()
+	if err != nil {
+		return nil, err
+	}
+
+	results := buildRecommendedResults(formulaItems, caskItems, s.installedSet())
+
+	// 复用搜索结果的批量信息补充：版本与描述
+	if len(results) > 0 {
+		s.enrichSearchResults(results)
+	}
 	return results, nil
 }
 

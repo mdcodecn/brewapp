@@ -38,10 +38,14 @@ function switchTab(tab) {
         // Dependencies tab doesn't auto-load, waits for user input
     }
     else if (tab === 'search') {
-        // Focus the search input once the tab transition finishes
+        // Focus the search input once the tab transition finishes.
+        // debounceSearch 会按输入框当前值决定：空 → 推荐安装列表；非空 → 重新搜索。
         setTimeout(() => {
             const input = document.getElementById('search-input');
-            if (input) input.focus();
+            if (input) {
+                input.focus();
+                window.debounceSearch();
+            }
         }, 160);
     }
     else if (tab === 'config') loadConfig();
@@ -1117,21 +1121,9 @@ async function uninstallPackage(name, type) {
 // ===== Search Page =====
 let searchTimeout = null;
 
-function renderSearchResults(results, warnings) {
-    const container = document.getElementById('search-results');
-    if (!container) return;
-
-    // Show non-fatal warnings (e.g. untrusted tap) above the results
-    const warnHTML = (warnings && warnings.length > 0)
-        ? warnings.map(w => `<div class="search-warning">${SEARCH_WARN_ICON}<span>${escapeHtml(w)}</span></div>`).join('')
-        : '';
-
-    if (!results || results.length === 0) {
-        container.innerHTML = warnHTML || emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试，如 git、google-chrome');
-        return;
-    }
-
-    container.innerHTML = warnHTML + results.slice(0, 50).map(r => `
+// 搜索结果与推荐列表共用的单行模板
+function searchResultItemHTML(r) {
+    return `
         <div class="result-item">
             <div class="result-icon result-icon-${r.type}">${r.type === 'cask' ? CASK_ICON : FORMULA_ICON}</div>
             <div class="result-main">
@@ -1149,7 +1141,24 @@ function renderSearchResults(results, warnings) {
                     : `<button class="btn btn-sm btn-primary" onclick="installPackage('${escapeHtml(r.name)}', '${r.type}')">安装</button>`}
             </div>
         </div>
-    `).join('');
+    `;
+}
+
+function renderSearchResults(results, warnings) {
+    const container = document.getElementById('search-results');
+    if (!container) return;
+
+    // Show non-fatal warnings (e.g. untrusted tap) above the results
+    const warnHTML = (warnings && warnings.length > 0)
+        ? warnings.map(w => `<div class="search-warning">${SEARCH_WARN_ICON}<span>${escapeHtml(w)}</span></div>`).join('')
+        : '';
+
+    if (!results || results.length === 0) {
+        container.innerHTML = warnHTML || emptyStateHTML(SEARCH_OFF_ICON, '未找到匹配的包', '换个关键词试试，如 git、google-chrome');
+        return;
+    }
+
+    container.innerHTML = warnHTML + results.slice(0, 50).map(searchResultItemHTML).join('');
 }
 
 async function doSearch(query) {
@@ -1165,15 +1174,71 @@ async function doSearch(query) {
     }
 }
 
+// ===== 推荐安装（搜索框为空时展示热门软件） =====
+let recommendedCache = null;
+let recommendedLoading = false;
+
+async function loadRecommended(force) {
+    const panel = document.getElementById('recommended-panel');
+    if (!panel) return;
+    if (recommendedLoading) return;
+    if (recommendedCache && !force) {
+        renderRecommended(recommendedCache);
+        return;
+    }
+
+    recommendedLoading = true;
+    panel.innerHTML = '<div class="loading-state"><span class="spinner"></span> 正在获取热门软件…</div>';
+    try {
+        const items = await Service.GetRecommended();
+        recommendedCache = items;
+        renderRecommended(items);
+    } catch (err) {
+        panel.innerHTML = `<div class="empty-state">获取推荐失败: ${escapeHtml(err.message)}</div>`;
+    } finally {
+        recommendedLoading = false;
+    }
+}
+
+// 渲染推荐列表：按类型分组展示，已安装状态与本地已装列表对齐
+function renderRecommended(items) {
+    const panel = document.getElementById('recommended-panel');
+    if (!panel || !items || items.length === 0) return;
+
+    const installedNames = new Set((installedPackages || []).map(p => `${p.type}:${p.name}`));
+    const itemsWithStatus = items.map(r => ({
+        ...r,
+        installed: r.installed || installedNames.has(`${r.type}:${r.name}`),
+    }));
+
+    const casks = itemsWithStatus.filter(r => r.type === 'cask');
+    const formulae = itemsWithStatus.filter(r => r.type === 'formula');
+    panel.innerHTML =
+        (casks.length ? `<div class="recommend-group-title">热门应用</div>` + casks.map(searchResultItemHTML).join('') : '')
+        + (formulae.length ? `<div class="recommend-group-title">热门命令行</div>` + formulae.map(searchResultItemHTML).join('') : '');
+}
+
 window.debounceSearch = function() {
     clearTimeout(searchTimeout);
     const input = document.getElementById('search-input');
     if (!input) return;
     const query = input.value.trim();
+    const panel = document.getElementById('recommended-panel');
+    const results = document.getElementById('search-results');
+    if (!panel || !results) return;
+
     if (!query) {
-        document.getElementById('search-results').innerHTML = '';
+        // 空关键词：展示推荐安装列表
+        results.innerHTML = '';
+        results.style.display = 'none';
+        panel.style.display = 'block';
+        loadRecommended();
         return;
     }
+
+    // 有关键词：隐藏推荐，显示搜索结果
+    panel.style.display = 'none';
+    results.style.display = 'block';
     searchTimeout = setTimeout(() => doSearch(query), 300);
 };
 
@@ -1196,6 +1261,11 @@ async function installPackage(name, type) {
                     }
                 });
                 loadInstalledInBackground();
+                // 若推荐面板当前可见，重渲染以同步“已安装”状态
+                const panel = document.getElementById('recommended-panel');
+                if (panel && panel.style.display !== 'none') {
+                    renderRecommended(recommendedCache);
+                }
                 return `${name} 安装成功`;
             } catch (err) {
                 throw new Error(`安装失败: ${err.message}`);

@@ -50,6 +50,10 @@ export function GetPackageDetail(arg1, arg2) {
   return window['go']['main']['Service']['GetPackageDetail'](arg1, arg2);
 }
 
+export function GetRecommended() {
+  return window['go']['main']['Service']['GetRecommended']();
+}
+
 export function GetSystemProxy() {
   return window['go']['main']['Service']['GetSystemProxy']();
 }

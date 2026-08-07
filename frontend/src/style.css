@@ -1398,6 +1398,25 @@ body {
   margin-top: 2px;
 }
 
+/* ===== Recommended installs (search page, empty query) ===== */
+.recommended-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recommend-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.4px;
+  margin: 12px 2px 2px;
+}
+
+.recommend-group-title:first-child {
+  margin-top: 2px;
+}
+
 /* ===== Settings Section ===== */
 .settings-section {
   background: var(--bg-secondary);
