@@ -85,3 +85,59 @@ func TestClassifyOutdated(t *testing.T) {
 		t.Error("both rows should be marked outdated")
 	}
 }
+
+// TestFindUnusedTaps verifies unused-tap detection: a tap is unused when no
+// installed formula/cask belongs to it; built-in taps are never flagged.
+func TestFindUnusedTaps(t *testing.T) {
+	cases := []struct {
+		name      string
+		taps      string
+		installed []string
+		want      []string
+	}{
+		{
+			name:      "all taps used",
+			taps:      "hashicorp/tap\nanomalyco/tap\n",
+			installed: []string{"hashicorp/tap/consul", "anomalyco/tap/opencode", "ffmpeg"},
+			want:      []string{},
+		},
+		{
+			name:      "mixed used and unused",
+			taps:      "steipete/tap\nhashicorp/tap\nfarion1231/ccswitch\n",
+			installed: []string{"steipete/tap/gifgrep", "ffmpeg"},
+			want:      []string{"farion1231/ccswitch", "hashicorp/tap"},
+		},
+		{
+			name:      "built-in taps never flagged",
+			taps:      "homebrew/core\nhomebrew/cask\nfoo/bar\n",
+			installed: []string{"ffmpeg"},
+			want:      []string{"foo/bar"},
+		},
+		{
+			name:      "cask names count too",
+			taps:      "hashicorp/tap\nfoo/bar\n",
+			installed: []string{"hashicorp/tap/vault"},
+			want:      []string{"foo/bar"},
+		},
+		{
+			name:      "noise lines ignored",
+			taps:      "==> Tapping foo/bar\nfoo/bar\nwarning: nothing\n",
+			installed: []string{"ffmpeg"},
+			want:      []string{"foo/bar"},
+		},
+		{
+			name:      "empty inputs",
+			taps:      "",
+			installed: nil,
+			want:      []string{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := findUnusedTaps(tc.taps, tc.installed)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("findUnusedTaps(%q, %v) = %v, want %v", tc.taps, tc.installed, got, tc.want)
+			}
+		})
+	}
+}

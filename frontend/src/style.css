@@ -1501,6 +1501,21 @@ body {
   white-space: nowrap;
 }
 
+/* 「未使用」标记：检查未使用仓库后，没有安装任何包的仓库会带上该徽标 */
+.tap-unused-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: middle;
+  background: var(--danger-dim);
+  color: var(--danger);
+}
+
 .tap-desc {
   font-size: 11px;
   color: var(--text-muted);

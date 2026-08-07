@@ -364,6 +364,7 @@
                     <div class="tap-add-row">
                         <input type="text" id="tap-input" class="search-input" placeholder="输入仓库名称，如: homebrew/cask">
                         <button class="btn btn-primary" onclick="addTap()">添加仓库</button>
+                        <button class="btn btn-secondary" id="check-unused-btn" onclick="checkUnusedTaps()" title="检查没有安装任何包（未使用）的仓库">检查未使用</button>
                     </div>
                     <div id="taps-list" class="tap-list" style="margin-top:14px;"></div>
                 </div>

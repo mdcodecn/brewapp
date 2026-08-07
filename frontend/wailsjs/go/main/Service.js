@@ -10,6 +10,10 @@ export function Autoremove() {
   return window['go']['main']['Service']['Autoremove']();
 }
 
+export function CheckUnusedTaps() {
+  return window['go']['main']['Service']['CheckUnusedTaps']();
+}
+
 export function Cleanup() {
   return window['go']['main']['Service']['Cleanup']();
 }

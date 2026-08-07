@@ -1485,18 +1485,26 @@ function updateTapBadge(count) {
     }
 }
 
+// 检查未使用仓库的结果缓存：未使用仓库名数组；null 表示尚未检查过。
+let cachedUnusedTaps = null;
+
 function renderTaps(taps, trustInfo) {
     // Update sidebar badge
     updateTapBadge(taps.length);
 
     const trustSupported = !!(trustInfo && trustInfo.supported);
     const trustedSet = new Set((trustInfo && trustInfo.taps) || []);
+    const unusedSet = new Set(cachedUnusedTaps || []);
 
     document.getElementById('taps-list').innerHTML = taps.length > 0
         ? taps.map(t => {
             const tapName = t.split(' ')[0];
             const rest = t.slice(tapName.length).trim();
             const trusted = trustedSet.has(tapName);
+            // 检查后把未使用仓库标记出来，提醒用户可移除
+            const unusedBadge = unusedSet.has(tapName)
+                ? `<span class="tap-unused-badge" title="没有安装任何来自该仓库的包">未使用</span>`
+                : '';
             // One stateful button carries both the state and the action:
             // 「信任」(primary) while untrusted, 「已信任 ✓」(green) once trusted.
             const trustBtn = trustSupported
@@ -1505,7 +1513,7 @@ function renderTaps(taps, trustInfo) {
             return `<div class="tap-item">
                 <div class="tap-icon">${TAP_ICON}</div>
                 <div class="tap-main">
-                    <span class="tap-name">${escapeHtml(tapName)}</span>
+                    <span class="tap-name">${escapeHtml(tapName)}${unusedBadge}</span>
                     ${rest ? `<span class="tap-desc">${escapeHtml(rest)}</span>` : ''}
                 </div>
                 <div class="tap-actions">
@@ -1515,6 +1523,28 @@ function renderTaps(taps, trustInfo) {
             </div>`;
         }).join('')
         : emptyStateHTML(TAP_ICON, '暂无仓库', '在上方输入仓库名称添加，如 homebrew/cask');
+}
+
+// 检查没有安装任何包（formula/cask）的仓库，即「未使用」仓库，可放心移除。
+window.checkUnusedTaps = checkUnusedTaps;
+async function checkUnusedTaps() {
+    const btn = document.getElementById('check-unused-btn');
+    if (btn) setButtonLoading(btn, true, '检查中');
+    try {
+        const unused = await Service.CheckUnusedTaps();
+        cachedUnusedTaps = unused;
+        if (currentTab === 'taps') {
+            renderTaps(tabCache.taps.data || [], cachedTrustInfo);
+        }
+        if (unused.length === 0) {
+            showToast('所有仓库都在使用中，没有未使用的仓库', 'success');
+        } else {
+            showToast(`发现 ${unused.length} 个未使用的仓库，已标记「未使用」，可放心移除`, 'info');
+        }
+    } catch (err) {
+        showToast('检查失败: ' + err.message, 'error');
+    }
+    if (btn) setButtonLoading(btn, false, '检查未使用');
 }
 
 // Toggle a tap's trust state with immediate effect; failures roll the

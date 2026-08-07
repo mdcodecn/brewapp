@@ -6,6 +6,8 @@ export function AddTap(arg1:string):Promise<void>;
 
 export function Autoremove():Promise<void>;
 
+export function CheckUnusedTaps():Promise<Array<string>>;
+
 export function Cleanup():Promise<void>;
 
 export function Doctor():Promise<string>;

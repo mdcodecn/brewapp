@@ -1160,6 +1160,73 @@ func (s *Service) GetTaps() ([]string, error) {
 	return taps, nil
 }
 
+// findUnusedTaps 从 brew tap 输出与已安装包完整名称中筛出「未使用」的仓库：
+// 没有任何已安装的 formula/cask 属于该仓库。
+// 已安装包完整名称形如 <owner>/<repo>/<name>（第三方仓库）或纯包名
+// （homebrew/core、homebrew/cask 的包），据此反推每个仓库是否被使用。
+// 内置仓库永不视为未使用。返回结果按名称排序。
+func findUnusedTaps(tapOutput string, installedNames []string) []string {
+	// 已使用仓库集合：完整名称前两段即所属仓库（如 hashicorp/tap/consul → hashicorp/tap）
+	used := make(map[string]bool)
+	for _, name := range installedNames {
+		parts := strings.Split(name, "/")
+		if len(parts) >= 3 {
+			used[parts[0]+"/"+parts[1]] = true
+		}
+	}
+
+	// 内置仓库永不视为未使用
+	builtin := map[string]bool{
+		"homebrew/core": true,
+		"homebrew/cask": true,
+	}
+
+	unused := make([]string, 0)
+	for _, line := range strings.Split(strings.TrimSpace(tapOutput), "\n") {
+		line = strings.TrimSpace(line)
+		if isBrewNoiseLine(line) {
+			continue
+		}
+		tap := strings.Fields(line)[0]
+		if builtin[tap] || used[tap] {
+			continue
+		}
+		unused = append(unused, tap)
+	}
+	sort.Strings(unused)
+	return unused
+}
+
+// CheckUnusedTaps 返回没有安装任何来自该仓库的包（formula/cask）的仓库列表，
+// 即「未使用的仓库」，可放心移除。
+func (s *Service) CheckUnusedTaps() ([]string, error) {
+	tapOutput, err := s.runBrew("tap")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get taps: %w", err)
+	}
+
+	// 收集已安装的 formula 与 cask 完整名称；单个 list 失败不影响整体结果
+	installed := make([]string, 0)
+	for _, args := range [][]string{
+		{"list", "--full-name"},
+		{"list", "--cask", "--full-name"},
+	} {
+		out, err := s.runBrew(args...)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+			line = strings.TrimSpace(line)
+			if isBrewNoiseLine(line) {
+				continue
+			}
+			installed = append(installed, line)
+		}
+	}
+
+	return findUnusedTaps(tapOutput, installed), nil
+}
+
 // GetDiskUsage returns disk usage info for brew directories.
 // The six `du` runs are parallelized (each can take 1-3s on a large Cellar) so
 // the total wait is bounded by the slowest directory instead of the sum.
