@@ -2,7 +2,6 @@ package main
 
 import (
 	"os"
-	"sync"
 	"testing"
 )
 
@@ -13,8 +12,10 @@ func TestResolveBrewPathInGUILikeEnv(t *testing.T) {
 	os.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
 	os.Setenv("SHELL", "/bin/zsh")
 
-	brewPathOnce = sync.Once{}
+	brewPathMu.Lock()
 	brewPath = ""
+	brewPathResolved = false
+	brewPathMu.Unlock()
 
 	p := resolveBrewPath()
 	t.Logf("resolved brew path: %q", p)

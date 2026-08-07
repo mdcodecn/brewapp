@@ -316,10 +316,11 @@ func fileExists(path string) bool {
 }
 
 // mirrorVarLineRe matches lines that set one of the mirror-related variables,
-// e.g. `export HOMEBREW_API_DOMAIN="..."`, `unset HOMEBREW_BOTTLE_DOMAIN` or
-// a plain `HOMEBREW_API_DOMAIN=...`.
+// in either shell syntax we persist: bash/zsh `export VAR="..."` / `unset VAR` /
+// `VAR=...`, and fish `set -gx VAR "..."`. Filtering must accept both so a
+// profile left over from another shell is cleaned up correctly.
 var mirrorVarLineRe = regexp.MustCompile(
-	`^\s*(?:export\s+|unset\s+)?(?:HOMEBREW_API_DOMAIN|HOMEBREW_BOTTLE_DOMAIN|HOMEBREW_BREW_GIT_REMOTE|HOMEBREW_CORE_GIT_REMOTE)\b`,
+	`^\s*(?:(?:export|unset)\s+|set\s+(?:-gx\s+)?)?(?:HOMEBREW_API_DOMAIN|HOMEBREW_BOTTLE_DOMAIN|HOMEBREW_BREW_GIT_REMOTE|HOMEBREW_CORE_GIT_REMOTE)\b`,
 )
 
 // filterMirrorLines removes every existing mirror configuration from the
@@ -359,12 +360,19 @@ func parseMirrorEnvFromFile(path string) map[string]string {
 }
 
 // parseMirrorEnv extracts the mirror variable values from shell profile
-// content. Handles `export VAR="value"`, `export VAR='value'` and `VAR=value`.
+// content. Handles bash/zsh `export VAR="value"` / `VAR=value` and fish
+// `set -gx VAR "value"`.
 func parseMirrorEnv(content string) map[string]string {
 	env := map[string]string{}
 	for _, line := range strings.Split(content, "\n") {
 		line = strings.TrimSpace(line)
 		for _, key := range mirrorEnvKeys {
+			// fish: set -gx VAR "value"
+			if strings.HasPrefix(line, "set -gx "+key) {
+				env[key] = trimQuotes(strings.TrimSpace(strings.TrimPrefix(line, "set -gx "+key)))
+				break
+			}
+			// bash/zsh: export VAR="value"
 			prefix := "export " + key + "="
 			if strings.HasPrefix(line, prefix) {
 				env[key] = trimQuotes(strings.TrimPrefix(line, prefix))
@@ -414,9 +422,15 @@ func writeShellMirrorEnv(path string, env map[string]string) error {
 
 	if len(env) > 0 {
 		sb.WriteString(mirrorBlockBegin + "\n")
+		fish := filepath.Base(os.Getenv("SHELL")) == "fish"
 		for _, key := range mirrorEnvKeys {
 			if v, ok := env[key]; ok {
-				sb.WriteString(fmt.Sprintf("export %s=\"%s\"\n", key, v))
+				if fish {
+					// fish 不认 export VAR="..."，需要 set -gx 语法
+					sb.WriteString(fmt.Sprintf("set -gx %s \"%s\"\n", key, v))
+				} else {
+					sb.WriteString(fmt.Sprintf("export %s=\"%s\"\n", key, v))
+				}
 			}
 		}
 		sb.WriteString(mirrorBlockEnd + "\n")

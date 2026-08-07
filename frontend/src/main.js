@@ -1,5 +1,5 @@
 // ===== Wails Bindings =====
-import * as App from '../wailsjs/go/main/App';
+// 所有 brew 能力统一通过 Service 绑定调用（镜像源/系统代理等不再走 App 转发层）
 import * as Service from '../wailsjs/go/main/Service';
 import * as Runtime from '../wailsjs/runtime/runtime';
 
@@ -74,40 +74,80 @@ function showToast(message, type = 'info') {
 // after its modal was dismissed can tell whether it is still the one on screen.
 let modalOpId = 0;
 
+// showModal：确认后执行 onConfirm 并立即关闭（opId 保护），错误由调用方处理。
 function showModal(title, body, onConfirm, streamOp) {
+    _openModalBase(title, body, '', streamOp, onConfirm, false);
+}
+
+// showModalLoading：确认期间按钮显示执行中，完成后把结果渲染进弹窗，
+// 按钮变为"关闭"；modalClassName 为弹窗附加样式类（如 'modal-lg'）。
+function showModalLoading(title, bodyHTML, onConfirm, modalClassName, streamOp) {
+    _openModalBase(title, bodyHTML, modalClassName || '', streamOp, onConfirm, true);
+}
+
+// _openModalBase 是 showModal / showModalLoading 的公共实现。
+// loading=false：执行完 onConfirm 即关闭；loading=true：显示执行中 spinner、
+// 结果提示，并把确认按钮变为"关闭"。
+function _openModalBase(title, bodyHTML, modalClassName, streamOp, onConfirm, loading) {
     document.getElementById('modal-title').textContent = title;
-    document.getElementById('modal-body').innerHTML = body;
-    document.getElementById('modal-overlay').style.display = 'flex';
+    const bodyEl = document.getElementById('modal-body');
+    bodyEl.innerHTML = bodyHTML;
+    const modalEl = document.getElementById('modal-overlay').querySelector('.modal');
+    modalEl.className = 'modal' + (modalClassName ? ' ' + modalClassName : '');
     const opId = ++modalOpId;
     document.getElementById('modal-overlay').dataset.opId = String(opId);
+    document.getElementById('modal-overlay').style.display = 'flex';
     const confirmBtn = document.getElementById('modal-confirm');
     const newBtn = confirmBtn.cloneNode(true);
     // cloneNode copies attributes from the previous run (data-done='1', the
     // '执行中...' spinner, disabled), so always reset the button to a fresh
     // confirm state — otherwise closing a running modal and opening another
-    // showModal-based feature would show a stuck '执行中...' button.
+    // would show a stuck '执行中...' button.
     newBtn.removeAttribute('data-done');
     newBtn.textContent = '确认';
     newBtn.disabled = false;
     confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
     newBtn.addEventListener('click', async () => {
+        // loading 模式下操作完成后按钮变为"关闭"，再次点击才关闭弹窗
+        if (loading && newBtn.dataset.done === '1') {
+            closeModal();
+            return;
+        }
         // Guard against double-clicks while a long operation is running
         if (newBtn.disabled) return;
         newBtn.disabled = true;
-        const bodyEl = document.getElementById('modal-body');
+        if (loading) {
+            newBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> 执行中...';
+        }
         let stream = null;
         if (streamOp) stream = attachBrewStream(streamOp, bodyEl);
         try {
-            await onConfirm();
+            const result = await onConfirm(newBtn);
+            if (loading && result) {
+                if (typeof result === 'object' && result.message != null) {
+                    renderModalResult(bodyEl, result.type || 'success', result.message);
+                } else {
+                    renderModalResult(bodyEl, 'success', result);
+                }
+            }
         } catch (err) {
-            // Handled by the caller; keep the modal open until it finishes
+            if (loading) {
+                renderModalResult(bodyEl, 'error', err.message || '操作失败');
+            }
+            // 非 loading 模式由调用方处理错误，保持弹窗打开直到流程结束
         } finally {
             if (stream) detachBrewStream(stream);
-            // Only close if this modal is still the one on screen: the user
-            // may have dismissed it mid-run and opened another feature, and
-            // the finished background op must not close that newer modal.
-            if (document.getElementById('modal-overlay').dataset.opId === String(opId)) {
-                closeModal();
+            if (loading) {
+                newBtn.dataset.done = '1';
+                newBtn.disabled = false;
+                newBtn.innerHTML = '关闭';
+            } else {
+                // Only close if this modal is still the one on screen: the user
+                // may have dismissed it mid-run and opened another feature, and
+                // the finished background op must not close that newer modal.
+                if (document.getElementById('modal-overlay').dataset.opId === String(opId)) {
+                    closeModal();
+                }
             }
         }
     });
@@ -126,11 +166,9 @@ function closeModal() {
 }
 
 // ===== Package Detail Modal =====
-let currentDetailPackage = null;
 
 window.showDetailModal = showDetailModal;
 function showDetailModal(pkg) {
-    currentDetailPackage = pkg;
     const body = document.getElementById('detail-modal-body');
 
     body.innerHTML = '<div class="loading-state"><span class="spinner"></span> 加载详情...</div>';
@@ -205,7 +243,6 @@ function renderRelationList(countId, listId, items, emptyText) {
 window.closeDetailModal = closeDetailModal;
 function closeDetailModal() {
     document.getElementById('detail-modal-overlay').style.display = 'none';
-    currentDetailPackage = null;
 }
 
 // ===== Cache System =====
@@ -426,8 +463,12 @@ async function refreshDashboard(force) {
     // If cache is valid, render immediately from cache
     if (isCacheValid(tabCache.dashboard)) {
         renderDashboard(tabCache.dashboard.data);
-        // Still refresh disk usage, taps and outdated in background
-        refreshDashboardInBackground();
+        // 缓存新鲜时不再每次都跑 4-5 个后台 brew 子进程；仅当某个区块
+        // （taps/services/outdated/磁盘）还没加载完整时才静默补齐。
+        const d = tabCache.dashboard.data;
+        if (d && (!d._tapsLoaded || !d._servicesLoaded || !d._outdatedLoaded || !cachedDiskUsage)) {
+            refreshDashboardInBackground();
+        }
         return;
     }
 
@@ -608,7 +649,6 @@ function updateDiskStat() {
 // ===== Shared icons (inline SVG, sized for list rows) =====
 const CASK_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>`;
 const FORMULA_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>`;
-const OUTDATED_ICON = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>`;
 const CHECK_ICON = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`;
 const SEARCH_OFF_ICON = `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="8" x2="14" y2="14"/><line x1="14" y1="8" x2="8" y2="14"/></svg>`;
 const SEARCH_WARN_ICON = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
@@ -757,7 +797,7 @@ function outdatedTopLevelCount(outdated) {
 }
 
 function renderDashboard(data) {
-    const { packages, outdated } = data;
+    const { outdated } = data;
 
     // Stats cards — formula stat respects leaves filter, and sidebar badge +
     // type-switch counts all come from updateInstalledCounts()
@@ -842,7 +882,10 @@ async function loadInstalled(tab) {
     } else {
         renderInstalled(type, installedPackages);
     }
-    loadInstalledInBackground(type);
+    // 缓存新鲜时不再触发后台 brew 子进程（启动预加载或 5 分钟内已拉取）
+    if (!isCacheValid(tabCache.installed)) {
+        loadInstalledInBackground(type);
+    }
 }
 
 async function loadInstalledInBackground(type) {
@@ -969,11 +1012,14 @@ function renderInstalled(type, packages) {
     `).join(''));
 }
 
+// 列表搜索输入防抖：避免每个按键都全量重建列表 DOM
+let installedSearchTimer = null;
 window.filterInstalled = filterInstalled;
 function filterInstalled() {
     const input = document.getElementById('installed-search');
     if (input) installedSearch[installedType] = input.value;
-    renderInstalled(installedType, installedPackages);
+    clearTimeout(installedSearchTimer);
+    installedSearchTimer = setTimeout(() => renderInstalled(installedType, installedPackages), 150);
 }
 
 window.reinstallPackage = reinstallPackage;
@@ -1116,11 +1162,10 @@ async function installPackage(name, type) {
 // ===== Outdated =====
 window.loadOutdated = loadOutdated;
 async function loadOutdated() {
-    // If cache is valid, render immediately from cache
+    // If cache is valid, render immediately from cache (不再额外后台刷新，
+    // 避免每次切 tab 都跑一次 `brew outdated` 子进程)
     if (isCacheValid(tabCache.outdated)) {
         renderOutdated(tabCache.outdated.data);
-        // Still refresh in background
-        loadOutdatedInBackground();
         return;
     }
 
@@ -1160,9 +1205,11 @@ async function loadOutdatedInBackground() {
     }
 }
 
+let outdatedSearchTimer = null;
 window.filterOutdated = filterOutdated;
 function filterOutdated() {
-    renderOutdated(tabCache.outdated.data || []);
+    clearTimeout(outdatedSearchTimer);
+    outdatedSearchTimer = setTimeout(() => renderOutdated(tabCache.outdated.data || []), 150);
 }
 
 window.upgradePackage = upgradePackage;
@@ -1386,7 +1433,6 @@ let cachedTrustInfo = { supported: false, taps: [] };
 async function loadTaps() {
     if (isCacheValid(tabCache.taps)) {
         renderTaps(tabCache.taps.data, cachedTrustInfo);
-        loadTapsInBackground();
         return;
     }
 
@@ -1581,16 +1627,17 @@ async function refreshServices() {
     spinRefreshBtn(btn, false);
 }
 
+let servicesSearchTimer = null;
 window.filterServices = filterServices;
 function filterServices() {
-    renderServices(tabCache.services.data || []);
+    clearTimeout(servicesSearchTimer);
+    servicesSearchTimer = setTimeout(() => renderServices(tabCache.services.data || []), 150);
 }
 
 async function loadServices() {
-    // If cache is valid, render immediately from cache
+    // If cache is valid, render immediately from cache (不再额外后台刷新)
     if (isCacheValid(tabCache.services)) {
         renderServices(tabCache.services.data);
-        loadServicesInBackground();
         return;
     }
     try {
@@ -1774,14 +1821,18 @@ async function toggleService(name, on) {
 }
 
 // ===== Utility =====
+// 纯字符串转义，避免每次调用创建 DOM 节点（列表渲染时会被调用上千次）。
+// 转义 & < > " ' \，使结果同时安全用于 HTML 文本/属性与单引号包裹的
+// onclick="..." 内联 JS 字符串。& 必须最先替换，防止二次转义。
 function escapeHtml(str) {
     if (!str) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    // innerHTML never escapes single quotes or backslashes; escape them too so
-    // the result is also safe inside single-quoted JS strings in onclick="..."
-    // attributes (e.g. upgradePackage('name-with-quote')).
-    return div.innerHTML.replace(/'/g, '&#39;').replace(/\\/g, '&#92;');
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/\\/g, '&#92;');
 }
 
 // Serialize an object for use inside an onclick="..." attribute safely.
@@ -1805,53 +1856,6 @@ function setButtonLoading(btn, loading, originalText) {
         btn.disabled = false;
         btn.innerHTML = btn.dataset.originalHTML || btn.dataset.originalText;
     }
-}
-
-// ===== Modal with Loading Indicator =====
-// modalClassName: optional extra class(es) for the modal (e.g. 'modal-lg')
-function showModalLoading(title, bodyHTML, onConfirm, modalClassName, streamOp) {
-    document.getElementById('modal-title').textContent = title;
-    const body = document.getElementById('modal-body');
-    body.innerHTML = bodyHTML;
-    const modalEl = document.getElementById('modal-overlay').querySelector('.modal');
-    modalEl.className = 'modal' + (modalClassName ? ' ' + modalClassName : '');
-    document.getElementById('modal-overlay').style.display = 'flex';
-    const confirmBtn = document.getElementById('modal-confirm');
-    const newBtn = confirmBtn.cloneNode(true);
-    // cloneNode copies attributes from the previous run (data-done='1', text '关闭'),
-    // so reset the button to a fresh confirm state
-    newBtn.removeAttribute('data-done');
-    newBtn.textContent = '确认';
-    newBtn.disabled = false;
-    confirmBtn.parentNode.replaceChild(newBtn, confirmBtn);
-    newBtn.addEventListener('click', async () => {
-        // After the operation has completed, the button turns into "关闭"
-        if (newBtn.dataset.done === '1') {
-            closeModal();
-            return;
-        }
-        newBtn.disabled = true;
-        newBtn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span> 执行中...';
-        let stream = null;
-        if (streamOp) stream = attachBrewStream(streamOp, body);
-        try {
-            const result = await onConfirm(newBtn);
-            if (result) {
-                if (typeof result === 'object' && result.message != null) {
-                    renderModalResult(body, result.type || 'success', result.message);
-                } else {
-                    renderModalResult(body, 'success', result);
-                }
-            }
-        } catch (err) {
-            renderModalResult(body, 'error', err.message || '操作失败');
-        } finally {
-            if (stream) detachBrewStream(stream);
-            newBtn.dataset.done = '1';
-            newBtn.disabled = false;
-            newBtn.innerHTML = '关闭';
-        }
-    });
 }
 
 // Show operation result inside the modal body (after onConfirm resolves/rejects)
@@ -2114,7 +2118,7 @@ let currentMirror = 'official';
 async function loadMirrorSources() {
     const list = document.getElementById('mirror-list');
     try {
-        const res = await App.GetMirrorSources();
+        const res = await Service.GetMirrorSources();
         mirrorSources = res.sources || [];
         currentMirror = res.current || 'official';
         renderMirrorSources();
@@ -2164,7 +2168,7 @@ async function testMirrorSpeeds() {
         }
     });
     try {
-        const results = await App.TestMirrorSpeeds();
+        const results = await Service.TestMirrorSpeeds();
         mirrorSpeedResults = results;
         applyMirrorSpeedResults(results);
     } catch (err) {
@@ -2245,7 +2249,7 @@ window.switchMirror = function(id) {
         + '<p style="margin:0;line-height:1.7;font-size:12px;color:var(--text-muted)">切换会写入对应的 shell 配置文件（macOS 默认 ~/.zshrc，fish/bash 用户写各自的配置文件）并立即对当前应用生效；下载异常时可随时切回官方源。原配置文件会备份为 .bak。</p>',
         async () => {
             try {
-                await App.SetMirrorSource(id);
+                await Service.SetMirrorSource(id);
                 currentMirror = id;
                 renderMirrorSources();
                 showToast('已切换到「' + src.name + '」', 'success');

@@ -13,7 +13,7 @@ import (
 var assets embed.FS
 
 func main() {
-	app := NewApp()
+	svc := NewService()
 
 	err := wails.Run(&options.App{
 		Title:            "Brew Manager",
@@ -35,10 +35,11 @@ func main() {
 			Assets: assets,
 		},
 		BackgroundColour: &options.RGBA{R: 24, G: 24, B: 27, A: 1},
-		OnStartup:        app.startup,
+		OnStartup:        svc.startup,
+		// 只绑定 Service：所有 brew 能力都在 Service 上（镜像源/系统代理等
+		// 此前由 App 薄转发，前端现统一走 Service，删除了多余绑定）。
 		Bind: []interface{}{
-			app,
-			app.brewService,
+			svc,
 		},
 	})
 

@@ -93,22 +93,35 @@ func (s *Service) setContext(ctx context.Context) {
 	applyPersistedSystemProxy()
 }
 
-// brewPathOnce / brewPath cache the resolved Homebrew location so we only pay
-// the discovery cost once. GUI apps launched from Finder/Dock inherit only
-// /usr/bin:/bin:/usr/sbin:/sbin, so "brew" is NOT resolvable through the
-// process PATH — we must find it in the user's actual environment.
+// startup is called when the app starts (Wails OnStartup).
+func (s *Service) startup(ctx context.Context) {
+	s.setContext(ctx)
+	// Hide the system traffic lights (we draw our own in the sidebar)
+	hideSystemTrafficLights()
+}
+
+// brewPathMu / brewPath / brewPathResolved cache the resolved Homebrew
+// location so we only pay the discovery cost once. GUI apps launched from
+// Finder/Dock inherit only /usr/bin:/bin:/usr/sbin:/sbin, so "brew" is NOT
+// resolvable through the process PATH — we must find it in the user's actual
+// environment. The mutex keeps ResetBrewDetection ("重新检测") race-free with
+// concurrent brew calls that read the cached path.
 var (
-	brewPathOnce sync.Once
-	brewPath     string
+	brewPathMu       sync.Mutex
+	brewPathResolved bool
+	brewPath         string
 )
 
 // brewExecutable returns the absolute path to the brew binary, resolving it
 // on first use. Returns "brew" as a last resort so error messages stay
 // meaningful when Homebrew is genuinely not installed.
 func brewExecutable() string {
-	brewPathOnce.Do(func() {
+	brewPathMu.Lock()
+	defer brewPathMu.Unlock()
+	if !brewPathResolved {
 		brewPath = resolveBrewPath()
-	})
+		brewPathResolved = true
+	}
 	return brewPath
 }
 
@@ -233,8 +246,10 @@ func isExecutableFile(p string) bool {
 // ResetBrewDetection clears the cached location so the next brew call
 // re-discovers it (used by the UI's "重新检测" button after installing brew).
 func (s *Service) ResetBrewDetection() {
-	brewPathOnce = sync.Once{}
+	brewPathMu.Lock()
+	defer brewPathMu.Unlock()
 	brewPath = ""
+	brewPathResolved = false
 }
 
 // BrewInfo reports Homebrew availability and location to the UI.
@@ -609,13 +624,17 @@ func (s *Service) brewInfoJSON(name string, args ...string) (string, error) {
 	return s.runBrewRetryUntrusted(full...)
 }
 
+// untrustedLoadPattern extracts the fully-qualified name (<tap>/<name>) from
+// an untrusted-tap refusal message. Compiled once at package level; the
+// refusal path is hit on every untrusted-tap retry.
+var untrustedLoadPattern = regexp.MustCompile(`Refusing to load (?:formula|cask) ([^\s]+) from untrusted tap`)
+
 // qualifiedInfoName extracts the fully-qualified name (<tap>/<name>) from an
 // untrusted-tap refusal message such as:
 // "Refusing to load formula hashicorp/tap/consul from untrusted tap ...".
 // Returns the original name when the message cannot be parsed.
 func qualifiedInfoName(name string, err error) string {
-	re := regexp.MustCompile(`Refusing to load (?:formula|cask) ([^\s]+) from untrusted tap`)
-	if m := re.FindStringSubmatch(err.Error()); len(m) > 1 {
+	if m := untrustedLoadPattern.FindStringSubmatch(err.Error()); len(m) > 1 {
 		return m[1]
 	}
 	return name
@@ -631,39 +650,17 @@ type PackageDetail struct {
 }
 
 // GetPackageDetail returns package info, install time and dependencies for a
-// single package in one brew call. GetUses stays separate (it is a different
-// command: `brew uses --installed <name>`).
+// single package in one brew call (`brew info --json=v2`). GetUses stays
+// separate (it is a different command: `brew uses --installed <name>`).
+// Whether the package is installed is derived from the info JSON itself
+// (formulae[].installed non-empty / casks[].installed_time > 0), avoiding a
+// separate `brew list --versions` subprocess.
 func (s *Service) GetPackageDetail(name, pkgType string) (*PackageDetail, error) {
 	detail := &PackageDetail{BrewPackage: BrewPackage{Name: name, Type: pkgType}}
 
-	// First check if the package is installed.
-	// Note: `brew list <name>` prints installed file paths, so it cannot be
-	// used to test installation. `brew list --versions <name>` prints
-	// "<name> <version>" when installed and nothing (exit 1) otherwise.
-	// Casks require the --cask flag (unlike plain `brew list`, which
-	// auto-detects them, `--versions` does not).
-	listArgs := []string{"list", "--versions"}
-	if pkgType == "cask" {
-		listArgs = append(listArgs, "--cask")
-	}
-	listArgs = append(listArgs, name)
-	if listOut, err := s.runBrew(listArgs...); err == nil {
-		// "<name> <version>" per line when installed; guard against warning
-		// lines being counted as an installed package
-		for _, line := range strings.Split(strings.TrimSpace(listOut), "\n") {
-			if isBrewNoiseLine(line) {
-				continue
-			}
-			parts := strings.Fields(line)
-			if len(parts) > 0 && parts[0] == name {
-				detail.Installed = true
-				break
-			}
-		}
-	}
-
 	// Primary: v2 format (object with formulae/casks arrays) — description,
-	// version, install time and dependencies all come from this one call.
+	// version, install time, installed state and dependencies all come from
+	// this one call.
 	jsonOutput, err := s.brewInfoJSON(name, "info", "--json=v2")
 	if err == nil {
 		var data infoV2JSON
@@ -672,6 +669,7 @@ func (s *Service) GetPackageDetail(name, pkgType string) (*PackageDetail, error)
 				c := data.Casks[0]
 				detail.Description = c.Desc
 				detail.Version = c.Version
+				detail.Installed = c.InstalledTime > 0
 				if c.InstalledTime > 0 {
 					detail.InstallTime = time.Unix(c.InstalledTime, 0).Format("2006-01-02 15:04:05")
 				}
@@ -681,6 +679,7 @@ func (s *Service) GetPackageDetail(name, pkgType string) (*PackageDetail, error)
 				f := data.Formulae[0]
 				detail.Description = f.Desc
 				detail.Version = f.Versions.Stable
+				detail.Installed = len(f.Installed) > 0
 				if len(f.Installed) > 0 && f.Installed[0].Time > 0 {
 					detail.InstallTime = time.Unix(f.Installed[0].Time, 0).Format("2006-01-02 15:04:05")
 				}
@@ -691,7 +690,8 @@ func (s *Service) GetPackageDetail(name, pkgType string) (*PackageDetail, error)
 	}
 
 	// Fallback: v1 format (bare array of formula objects) for older brew
-	// versions — description and version only (no deps / install time).
+	// versions — description, version and installed state only (no deps /
+	// install time).
 	jsonOutput, err = s.brewInfoJSON(name, "info", "--json")
 	if err != nil {
 		return detail, err
@@ -702,6 +702,9 @@ func (s *Service) GetPackageDetail(name, pkgType string) (*PackageDetail, error)
 		Versions struct {
 			Stable string `json:"stable"`
 		} `json:"versions"`
+		Installed []struct {
+			Time int64 `json:"time"`
+		} `json:"installed"`
 	}
 	if err := json.Unmarshal([]byte(jsonOutput), &info); err != nil {
 		return detail, err
@@ -709,6 +712,7 @@ func (s *Service) GetPackageDetail(name, pkgType string) (*PackageDetail, error)
 	if len(info) > 0 {
 		detail.Description = info[0].Desc
 		detail.Version = info[0].Versions.Stable
+		detail.Installed = len(info[0].Installed) > 0
 	}
 	return detail, nil
 }
@@ -1483,30 +1487,6 @@ func (s *Service) GetVulns() (string, error) {
 		return output, nil
 	}
 	return output, nil
-}
-
-// GetOutdatedWithVersion returns outdated packages with current and latest versions
-func (s *Service) GetOutdatedWithVersion() ([]BrewPackage, error) {
-	output, err := s.runBrew("outdated")
-	if err != nil {
-		return []BrewPackage{}, nil
-	}
-
-	// Build the cask set once — previously `brew list --cask` was re-queried
-	// inside the loop (N+1 subprocess calls).
-	caskSet := make(map[string]bool)
-	if caskOut, err := s.runBrew("list", "--cask"); err == nil {
-		for _, line := range strings.Split(strings.TrimSpace(caskOut), "\n") {
-			caskSet[strings.TrimSpace(line)] = true
-		}
-	}
-
-	packages := classifyOutdated(output, caskSet)
-	// Sort: casks first, then formulas (stable, keeps brew's original order within each type)
-	sort.SliceStable(packages, func(i, j int) bool {
-		return packages[i].Type == "cask" && packages[j].Type != "cask"
-	})
-	return packages, nil
 }
 
 // classifyOutdated parses `brew outdated` text output ("name current latest"

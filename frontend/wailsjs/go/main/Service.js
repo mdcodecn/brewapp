@@ -42,10 +42,6 @@ export function GetOutdated() {
   return window['go']['main']['Service']['GetOutdated']();
 }
 
-export function GetOutdatedWithVersion() {
-  return window['go']['main']['Service']['GetOutdatedWithVersion']();
-}
-
 export function GetPackageDetail(arg1, arg2) {
   return window['go']['main']['Service']['GetPackageDetail'](arg1, arg2);
 }

@@ -339,3 +339,80 @@ func TestTestMirrorSpeedsParallel(t *testing.T) {
 		t.Error("unreachable mirror should fail")
 	}
 }
+
+// TestParseMirrorEnvFish verifies fish syntax (`set -gx VAR "value"`) is
+// parsed back from a config.fish, so switching sources on fish works.
+func TestParseMirrorEnvFish(t *testing.T) {
+	content := `
+set -gx PATH /usr/bin
+set -gx HOMEBREW_API_DOMAIN "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api"
+set -gx HOMEBREW_BOTTLE_DOMAIN 'https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles'
+set -gx HOMEBREW_BREW_GIT_REMOTE "https://mirrors.tuna.tsinghua.edu.cn/git/homebrew/brew.git"
+`
+	env := parseMirrorEnv(content)
+	if env["HOMEBREW_API_DOMAIN"] != "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api" {
+		t.Errorf("API_DOMAIN = %q, want tuna value", env["HOMEBREW_API_DOMAIN"])
+	}
+	if env["HOMEBREW_BOTTLE_DOMAIN"] != "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles" {
+		t.Errorf("BOTTLE_DOMAIN = %q, want single-quoted value stripped", env["HOMEBREW_BOTTLE_DOMAIN"])
+	}
+}
+
+// TestFilterMirrorLinesFish verifies fish mirror lines are cleaned by
+// filterMirrorLines (a profile left from a fish session must not survive a
+// switch back to bash/zsh).
+func TestFilterMirrorLinesFish(t *testing.T) {
+	content := `set -gx HOMEBREW_API_DOMAIN "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api"
+set -gx PATH /usr/bin
+export SOME_OTHER_VAR=1
+`
+	got := filterMirrorLines(content)
+	if strings.Contains(got, "HOMEBREW_API_DOMAIN") {
+		t.Errorf("fish mirror line was not filtered:\n%s", got)
+	}
+	if !strings.Contains(got, "set -gx PATH") {
+		t.Errorf("unrelated fish line should be preserved:\n%s", got)
+	}
+	if !strings.Contains(got, "SOME_OTHER_VAR") {
+		t.Errorf("unrelated export should be preserved:\n%s", got)
+	}
+}
+
+// TestWriteShellMirrorEnvFish verifies that with SHELL=fish the mirror block
+// is written in fish syntax (`set -gx ...`) into config.fish, and that the
+// persisted value is read back correctly.
+func TestWriteShellMirrorEnvFish(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	t.Setenv("SHELL", "/opt/homebrew/bin/fish")
+	os.MkdirAll(filepath.Join(dir, ".config", "fish"), 0o755)
+
+	path := shellConfigPath()
+	want := filepath.Join(dir, ".config", "fish", "config.fish")
+	if path != want {
+		t.Fatalf("shellConfigPath() = %q, want %q", path, want)
+	}
+
+	if err := writeShellMirrorEnv(path, map[string]string{
+		"HOMEBREW_API_DOMAIN": "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if !strings.Contains(got, `set -gx HOMEBREW_API_DOMAIN "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api"`) {
+		t.Errorf("config.fish missing fish-format export:\n%s", got)
+	}
+	if strings.Contains(got, "export HOMEBREW") {
+		t.Errorf("config.fish must not contain bash export syntax:\n%s", got)
+	}
+
+	env := parseMirrorEnvFromFile(path)
+	if env["HOMEBREW_API_DOMAIN"] != "https://mirrors.tuna.tsinghua.edu.cn/homebrew-bottles/api" {
+		t.Errorf("read-back API_DOMAIN = %q", env["HOMEBREW_API_DOMAIN"])
+	}
+}

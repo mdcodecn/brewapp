@@ -22,8 +22,6 @@ export function GetMirrorSources():Promise<main.MirrorSourcesResponse>;
 
 export function GetOutdated():Promise<Array<main.BrewPackage>>;
 
-export function GetOutdatedWithVersion():Promise<Array<main.BrewPackage>>;
-
 export function GetPackageDetail(arg1:string,arg2:string):Promise<main.PackageDetail>;
 
 export function GetSystemProxy():Promise<main.SystemProxyStatus>;
