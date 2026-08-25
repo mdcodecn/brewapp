@@ -1148,6 +1148,19 @@ function renderSearchResults(results, warnings) {
     const container = document.getElementById('search-results');
     if (!container) return;
 
+    // 结果统计：仅在命中时显示，超过 50 条时提示截断
+    const metaEl = document.getElementById('search-meta');
+    if (metaEl) {
+        if (results && results.length > 0) {
+            const total = results.length;
+            const shown = Math.min(total, 50);
+            metaEl.style.display = 'flex';
+            metaEl.innerHTML = `<span class="search-meta-dot"></span>找到 <strong>${total}</strong> 个匹配结果${total > shown ? `，仅显示前 ${shown} 个` : ''}`;
+        } else {
+            hideSearchMeta();
+        }
+    }
+
     // Show non-fatal warnings (e.g. untrusted tap) above the results
     const warnHTML = (warnings && warnings.length > 0)
         ? warnings.map(w => `<div class="search-warning">${SEARCH_WARN_ICON}<span>${escapeHtml(w)}</span></div>`).join('')
@@ -1165,6 +1178,7 @@ async function doSearch(query) {
     const container = document.getElementById('search-results');
     if (!container) return;
     container.innerHTML = '<div class="loading-state"><span class="spinner"></span> 搜索中...</div>';
+    hideSearchMeta();
 
     try {
         const resp = await Service.Search(query);
@@ -1201,12 +1215,17 @@ function recommendCardHTML(r, maxPercent) {
     const heatWidth = maxPercent > 0 && pct > 0 ? Math.max(8, Math.round((pct / maxPercent) * 100)) : 0;
     const initial = (r.name[0] || '?').toUpperCase();
     const hot = r.rank && r.rank <= 3;
+    // 前三名金银铜配色，其余保持蓝色实心
+    const rankCls = r.rank === 1 ? ' recommend-rank-tag-gold'
+        : r.rank === 2 ? ' recommend-rank-tag-silver'
+        : r.rank === 3 ? ' recommend-rank-tag-bronze'
+        : '';
     return `
         <div class="recommend-card">
             <div class="recommend-badge recommend-badge-${r.type}">${escapeHtml(initial)}</div>
             <div class="recommend-info">
                 <div class="recommend-name"><span class="recommend-name-text" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</span>
-                    ${r.rank ? `<span class="recommend-rank-tag${hot ? ' recommend-rank-tag-hot' : ''}">TOP${r.rank}</span>` : ''}
+                    ${r.rank ? `<span class="recommend-rank-tag${rankCls}">TOP${r.rank}</span>` : ''}
                 </div>
                 ${heatText ? `
                 <div class="recommend-heat" title="30 天安装占比">
@@ -1335,11 +1354,16 @@ window.debounceSearch = function() {
     const results = document.getElementById('search-results');
     if (!panel || !results) return;
 
+    // 同步清空按钮显隐：有内容时出现，空时隐藏
+    const clearBtn = document.getElementById('search-clear-btn');
+    if (clearBtn) clearBtn.style.display = query ? 'inline-flex' : 'none';
+
     if (!query) {
         // 空关键词：展示推荐安装列表
         results.innerHTML = '';
         results.style.display = 'none';
         panel.style.display = 'block';
+        hideSearchMeta();
         loadRecommended();
         return;
     }
@@ -1348,6 +1372,27 @@ window.debounceSearch = function() {
     panel.style.display = 'none';
     results.style.display = 'block';
     searchTimeout = setTimeout(() => doSearch(query), 300);
+};
+
+// 隐藏搜索结果统计（空关键词 / 搜索加载中时调用）
+function hideSearchMeta() {
+    const meta = document.getElementById('search-meta');
+    if (meta) {
+        meta.style.display = 'none';
+        meta.innerHTML = '';
+    }
+}
+
+// 清空搜索：恢复推荐面板并聚焦输入框
+window.clearSearch = function() {
+    const input = document.getElementById('search-input');
+    if (!input) return;
+    input.value = '';
+    const clearBtn = document.getElementById('search-clear-btn');
+    if (clearBtn) clearBtn.style.display = 'none';
+    hideSearchMeta();
+    window.debounceSearch();
+    input.focus();
 };
 
 window.installPackage = installPackage;
@@ -2645,7 +2690,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (searchInput) {
         searchInput.addEventListener('input', () => window.debounceSearch());
         searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') searchInput.blur();
+            if (e.key === 'Escape') {
+                // 有内容时 Esc 先清空并回到推荐列表，再次按 Esc 才失焦
+                if (searchInput.value.trim()) {
+                    e.preventDefault();
+                    window.clearSearch();
+                } else {
+                    searchInput.blur();
+                }
+            }
         });
     }
 });

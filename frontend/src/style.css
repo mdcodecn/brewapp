@@ -1232,6 +1232,88 @@ body {
   margin-bottom: 20px;
 }
 
+/* 搜索框容器：更宽、更圆润，聚焦时带蓝色光圈 */
+.search-field {
+  position: relative;
+  max-width: 540px;
+}
+
+/* 仅作用于搜索页输入框（.list-search 被其它页面共用，避免波及） */
+.search-field .search-input {
+  width: 100%;
+  max-width: none;
+  margin-bottom: 0;
+  padding: 11px 42px 11px 40px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  background-position: 14px center;
+  transition: box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.search-field .search-input:hover {
+  background-color: #fafafa;
+}
+
+.search-field .search-input:focus {
+  background-color: var(--bg-secondary);
+  /* 全局规则强制 box-shadow:none，这里用 !important 重新开启蓝色光圈 */
+  box-shadow: 0 0 0 3px var(--accent-dim) !important;
+}
+
+/* 清空按钮：有内容时出现，悬停加深 */
+.search-clear-btn {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.search-clear-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.search-clear-btn svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* 搜索结果统计：输入关键词后出现在搜索框下方 */
+.search-meta {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  margin-top: 9px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.search-meta-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+
+.search-meta strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
 .search-input {
   background: var(--bg-secondary);
   border-radius: 10px;
@@ -1279,12 +1361,13 @@ body {
   padding: 12px 18px;
   background: var(--bg-secondary);
   border-radius: 12px;
-  transition: all 0.12s ease;
+  transition: transform 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .result-item:hover {
   background-color: var(--bg-tertiary);
   transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
 }
 
 .result-icon {
@@ -1295,6 +1378,12 @@ body {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+/* 悬停时图标轻微放大，卡片更有“活”感 */
+.result-item:hover .result-icon {
+  transform: scale(1.05);
 }
 
 .result-icon-cask { background: var(--accent-dim); color: var(--accent); }
@@ -1362,6 +1451,8 @@ body {
   background: var(--success-dim);
   padding: 2px 8px;
   border-radius: 10px;
+  /* 全局 border:none，用 inset 阴影模拟内描边，让已安装标签更清晰 */
+  box-shadow: inset 0 0 0 1px rgba(52, 199, 89, 0.22) !important;
 }
 
 /* Non-fatal search warnings (e.g. untrusted tap) shown above results */
@@ -1415,6 +1506,7 @@ body {
   transform: translateY(-1px);
   border-color: var(--accent-dim);
   background: var(--bg-tertiary);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06) !important;
 }
 
 /* 渐变缩写徽章（与 mirror-badge 一致） */
@@ -1461,7 +1553,7 @@ body {
   white-space: nowrap;
 }
 
-/* TOP 排名胶囊：实心样式，与 mirror-current-tag 一致；前三名暖色 */
+/* TOP 排名胶囊：前三名金银铜配色，更直观区分名次 */
 .recommend-rank-tag {
   flex-shrink: 0;
   padding: 2px 8px;
@@ -1473,8 +1565,16 @@ body {
   line-height: 1.5;
 }
 
-.recommend-rank-tag-hot {
-  background: var(--warning);
+.recommend-rank-tag-gold {
+  background: linear-gradient(135deg, #f7b500, #ffd60a);
+}
+
+.recommend-rank-tag-silver {
+  background: linear-gradient(135deg, #8e949c, #c7ccd4);
+}
+
+.recommend-rank-tag-bronze {
+  background: linear-gradient(135deg, #c97d45, #e3a06c);
 }
 
 /* 热度行：迷你热度条（组内归一化）+ 占比，比纯文字更直观 */
@@ -1496,13 +1596,13 @@ body {
 .recommend-heat-fill {
   height: 100%;
   border-radius: 3px;
-  background: var(--accent);
+  background: linear-gradient(90deg, #0a84ff, #5ac8fa);
   transition: width 0.3s ease;
 }
 
-/* 前三名热度条用暖色，与 TOP 徽章呼应 */
+/* 前三名热度条用暖色渐变，与 TOP 徽章呼应 */
 .recommend-heat-fill-hot {
-  background: var(--warning);
+  background: linear-gradient(90deg, #ff9500, #ffcc00);
 }
 
 .recommend-heat-label {
