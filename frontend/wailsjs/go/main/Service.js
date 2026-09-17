@@ -130,6 +130,10 @@ export function Search(arg1) {
   return window['go']['main']['Service']['Search'](arg1);
 }
 
+export function SendBrewInput(arg1) {
+  return window['go']['main']['Service']['SendBrewInput'](arg1);
+}
+
 export function SetMirrorSource(arg1) {
   return window['go']['main']['Service']['SetMirrorSource'](arg1);
 }

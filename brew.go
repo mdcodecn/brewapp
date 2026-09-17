@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/creack/pty"
@@ -297,6 +297,7 @@ const (
 	brewEventRefresh = "refresh" // \r progress-bar update: replace the last line
 	brewEventPhase   = "phase"   // section header (config import between packages)
 	brewEventDone    = "done"    // command finished
+	brewEventPrompt  = "prompt"  // process is waiting for user input (Y/N, password, …)
 )
 
 // brewProgressEvent is the JSON payload of a "brew:progress" event.
@@ -349,6 +350,14 @@ func splitBrewOutput(data []byte, atEOF bool) (advance int, token []byte, err er
 	return 0, nil, nil
 }
 
+// promptRe matches interactive prompts brew (or a cask's installer script,
+// or sudo) may print while waiting for input. The pty delivers prompt lines
+// WITHOUT a trailing newline (the process is blocked writing "…? [Y/n]"),
+// so the scanner sees them as a partial token when the read idle-timer fires.
+// sudo 密码提示："Password:"；brew/cask 确认："... [Y/n]"、"... (Y/N)"；
+// 还有 cask 安装脚本常见的 "Press RETURN/Enter to continue"。
+var promptRe = regexp.MustCompile(`(?i)(password\s*:|\[Y/n\]|\[y/N\]|\(Y/N\)|\(y/n\)|press\s+(return|enter))`)
+
 // streamCommand runs `brew <args...>` under a pseudo-terminal (pty) and
 // streams its output line-by-line to the frontend as "brew:progress" events
 // tagged with op. It returns the captured output (delimiter-trimmed) and the
@@ -385,26 +394,88 @@ func (s *Service) streamCommand(op string, args ...string) (string, error) {
 		mu.Unlock()
 	}
 
+	// promptState lets SendBrewInput reach the pty while this command runs.
+	// CompareAndSwap 在流结束后将其置回 nil：此后 UI 迟到的输入会被静默
+	// 丢弃，而不是写进已关闭的 pty 引发 panic。
+	promptState := &brewPromptState{ptmx: ptmx, op: op, service: s}
+	activePrompt.Store(promptState)
+	defer activePrompt.CompareAndSwap(promptState, nil)
+
 	// Read the merged stdout+stderr stream from the pty master. The master
 	// hits EOF once the child (and its pty slave) exits, so this loop ends
 	// naturally and Wait can then reap the process.
-	sc := bufio.NewScanner(ptmx)
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	sc.Split(splitBrewOutput)
-	for sc.Scan() {
-		raw := ansiEscapeRe.ReplaceAllString(sc.Text(), "")
-		var kind, text string
-		if strings.HasSuffix(raw, "\r") {
-			// tty converts \n to \r\n; a lone \r (no following \n) is a
-			// progress-bar refresh that replaces the previous line
-			kind, text = brewEventRefresh, strings.TrimRight(raw, "\r")
-		} else {
-			kind, text = brewEventLine, strings.TrimRight(raw, "\r\n")
+	//
+	// Interactive prompts ("... [Y/n]?", "Password:") are written WITHOUT a
+	// trailing newline — the child blocks waiting for input — so a plain
+	// line scanner would never emit them. We read raw chunks instead: any
+	// newline-terminated token is emitted immediately; the newline-less tail
+	// stays buffered and is re-checked after each idle interval, so a prompt
+	// sitting on screen (output quiet for idlePromptDelay) triggers a
+	// "prompt" event asking the frontend for user input.
+	idleCh := make(chan struct{}, 1) // 空闲检查信号：有新数据时清掉挂起信号
+	var lastReadAt atomic.Int64 // 最近一次读到输出的时间（纳秒时间戳）
+	lastReadAt.Store(time.Now().UnixNano())
+	var tail strings.Builder // 尚未以换行结尾的输出尾部（可能是提示符）
+	idleDone := make(chan struct{})
+	defer close(idleDone)
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-idleDone:
+				return
+			case <-ticker.C:
+				if time.Since(time.Unix(0, lastReadAt.Load())) >= idlePromptDelay {
+					select {
+					case idleCh <- struct{}{}:
+					default:
+					}
+				}
+			}
 		}
-		if text == "" {
-			continue
+	}()
+
+	buf := make([]byte, 64*1024)
+	for {
+		n, readErr := ptmx.Read(buf)
+		if n > 0 {
+			lastReadAt.Store(time.Now().UnixNano())
+			clean := ansiEscapeRe.ReplaceAllString(string(buf[:n]), "")
+			tail.WriteString(clean)
+			// 把 tail 中所有完整行（\n 或单独 \r 结尾）逐行发到前端；
+			// 不带换行的尾部留在 tail 里等下一次读取或空闲检查。
+			for {
+				line, rest, isLine := splitLineToken(tail.String())
+				if !isLine {
+					break
+				}
+				tail.Reset()
+				tail.WriteString(rest)
+				emitLineToken(emit, line)
+			}
+			// 新数据到来，清掉挂起的空闲信号（提示符后又有输出了）
+			select {
+			case <-idleCh:
+			default:
+			}
 		}
-		emit(kind, text)
+		if readErr != nil {
+			// EOF：子进程已退出。把 tail 里残余内容作为最后一行发出。
+			if rest := tail.String(); strings.TrimSpace(rest) != "" {
+				emitLineToken(emit, rest)
+			}
+			tail.Reset()
+			break
+		}
+		// 空闲超时且 tail 未变：检查是否为交互提示符
+		select {
+		case <-idleCh:
+			if rest := tail.String(); promptRe.MatchString(rest) {
+				promptState.onPrompt(rest)
+			}
+		default:
+		}
 	}
 
 	ptmx.Close()
@@ -412,6 +483,94 @@ func (s *Service) streamCommand(op string, args ...string) (string, error) {
 		return out.String(), err
 	}
 	return out.String(), nil
+}
+
+// idlePromptDelay 是输出安静多久后，把不带换行的输出尾部当作交互提示符
+// 检查一次。取值需要大于 pty 输出的自然停顿（如下载进度刷新间隔），
+// 小于用户等待的超时耐心。
+const idlePromptDelay = 1200 * time.Millisecond
+
+// brewPromptState 把一条流式 brew 命令的 pty 暴露给 SendBrewInput，并记录
+// 提示符去重状态（同一提示符只问一次，避免空闲检查反复弹框）。
+type brewPromptState struct {
+	service *Service
+	ptmx    *os.File
+	op      string
+	mu      sync.Mutex
+	// lastPrompt 记录上次已触发过 prompt 事件的提示文本，同一段提示
+	// （tail 未变化）不会重复询问。
+	lastPrompt string
+}
+
+// onPrompt 把检测到的提示符发给前端请求用户输入。同一提示只发一次。
+func (p *brewPromptState) onPrompt(text string) {
+	p.mu.Lock()
+	if p.lastPrompt == text {
+		p.mu.Unlock()
+		return
+	}
+	p.lastPrompt = text
+	p.mu.Unlock()
+	p.service.emitBrewEvent(p.op, brewEventPrompt, text, false, "")
+}
+
+// activePrompt 指向当前正在运行的流式命令（最多同时一个，UI 已串行化）。
+// SendBrewInput 从这里拿到 pty；streamCommand 结束时用 CompareAndSwap 清空。
+var activePrompt atomic.Pointer[brewPromptState]
+
+// splitLineToken 从 data 中切出第一个完整行（以 \n 或单独 \r 结尾）。
+// 返回值：line 为含分隔符的行内容，rest 为剩余字节，isLine 表示是否切出。
+// 与 splitBrewOutput 的语义一致（tty 会把 \n 转成 \r\n，单独的 \r 是
+// 进度条刷新），只是改为从字符串尾部继续切而非全局 scanner。
+func splitLineToken(data string) (line, rest string, isLine bool) {
+	for i := 0; i < len(data); i++ {
+		if data[i] == '\n' {
+			return data[:i+1], data[i+1:], true
+		}
+		if data[i] == '\r' {
+			if i+1 < len(data) && data[i+1] == '\n' {
+				return data[:i+2], data[i+2:], true
+			}
+			return data[:i+1], data[i+1:], true
+		}
+	}
+	return "", data, false
+}
+
+// emitLineToken 把一行 pty 输出分类（普通行 / 进度条刷新）后发给前端。
+func emitLineToken(emit func(kind, text string), raw string) {
+	var kind, text string
+	if strings.HasSuffix(raw, "\r") {
+		// tty converts \n to \r\n; a lone \r (no following \n) is a
+		// progress-bar refresh that replaces the previous line
+		kind, text = brewEventRefresh, strings.TrimRight(raw, "\r")
+	} else {
+		kind, text = brewEventLine, strings.TrimRight(raw, "\r\n")
+	}
+	if text == "" {
+		return
+	}
+	emit(kind, text)
+}
+
+// SendBrewInput 把用户在 UI 上输入的一行内容写入当前流式命令的 pty stdin，
+// 用于应答交互提示（Y/N 确认、sudo 密码、回车继续等）。没有正在等待输入
+// 的命令时返回错误提示。
+func (s *Service) SendBrewInput(text string) error {
+	p := activePrompt.Load()
+	if p == nil {
+		return fmt.Errorf("当前没有等待输入的命令")
+	}
+	_, err := p.ptmx.WriteString(text + "\n")
+	if err != nil {
+		return fmt.Errorf("写入输入失败：%w", err)
+	}
+	// 输入已应答，重置去重状态：同一命令后续可能再出现新的提示。
+	p.mu.Lock()
+	p.lastPrompt = ""
+	p.mu.Unlock()
+	debugLog("SendBrewInput op=%q len=%d", p.op, len(text))
+	return nil
 }
 
 // runBrewStreaming runs a brew command under a frontend-streamed progress log.

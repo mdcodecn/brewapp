@@ -66,6 +66,8 @@ export function RunService(arg1:string):Promise<void>;
 
 export function Search(arg1:string):Promise<main.SearchResponse>;
 
+export function SendBrewInput(arg1:string):Promise<void>;
+
 export function SetMirrorSource(arg1:string):Promise<void>;
 
 export function SetSystemProxyEnabled(arg1:boolean):Promise<main.SystemProxyStatus>;

@@ -2235,9 +2235,77 @@ function attachBrewStream(op, host) {
     pane.innerHTML = '';
     const pre = document.createElement('pre');
     pane.appendChild(pre);
-    const st = { op, log: pane, pre, lineCount: 0, pendingLines: [], pendingRefresh: null, flushScheduled: false };
+    // 交互提示应答区：后端检测到 [Y/n]、Password: 等提示时显示输入框
+    const promptBox = document.createElement('div');
+    promptBox.className = 'prompt-box';
+    promptBox.hidden = true;
+    pane.appendChild(promptBox);
+    const st = { op, log: pane, pre, promptBox, promptVisible: false, lineCount: 0, pendingLines: [], pendingRefresh: null, flushScheduled: false };
     activeBrewStream = st;
     return st;
+}
+
+// showBrewPrompt 在日志面板底部显示交互提示应答区。
+// password 为 true 时用密码框（sudo 输入不回显明文）。
+function showBrewPrompt(st, text, password) {
+    st.log.hidden = false;
+    const box = st.promptBox;
+    box.hidden = false;
+    box.innerHTML = '';
+
+    const msg = document.createElement('div');
+    msg.className = 'prompt-msg';
+    msg.textContent = text.trim() || '命令正在等待输入';
+    box.appendChild(msg);
+
+    const row = document.createElement('div');
+    row.className = 'prompt-row';
+
+    // [Y/n] 类确认提示提供快捷按钮，其余（密码/回车）只给输入框
+    const isYN = /\[Y\/n\]|\[y\/N\]|\(Y\/N\)|\(y\/n\)/i.test(text);
+    if (isYN) {
+        const yes = document.createElement('button');
+        yes.className = 'btn prompt-btn';
+        yes.textContent = '是 (Y)';
+        yes.addEventListener('click', () => submitBrewInput(st, 'y'));
+        const no = document.createElement('button');
+        no.className = 'btn prompt-btn';
+        no.textContent = '否 (N)';
+        no.addEventListener('click', () => submitBrewInput(st, 'n'));
+        row.appendChild(yes);
+        row.appendChild(no);
+    }
+
+    const input = document.createElement('input');
+    input.type = password ? 'password' : 'text';
+    input.className = 'prompt-input';
+    input.placeholder = password ? '输入密码后回车' : (isYN ? '或输入 y/n 后回车' : '输入内容后回车');
+    input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') submitBrewInput(st, input.value);
+    });
+    row.appendChild(input);
+
+    const send = document.createElement('button');
+    send.className = 'btn prompt-btn';
+    send.textContent = '发送';
+    send.addEventListener('click', () => submitBrewInput(st, input.value));
+    row.appendChild(send);
+
+    box.appendChild(row);
+    st.promptVisible = true;
+    // 聚焦输入框，方便直接键入
+    setTimeout(() => input.focus(), 50);
+}
+
+// submitBrewInput 把用户输入回传给后端写入 pty，并隐藏应答区。
+function submitBrewInput(st, value) {
+    if (!st.promptVisible) return;
+    st.promptVisible = false;
+    st.promptBox.hidden = true;
+    st.promptBox.innerHTML = '';
+    Service.SendBrewInput(value).catch(err => {
+        showToast('发送输入失败：' + (err.message || err), 'error');
+    });
 }
 
 function detachBrewStream(st) {
@@ -2251,6 +2319,12 @@ function handleBrewProgress(st, e) {
         // progress-bar update: replaces the previous rendered line
         st.pendingRefresh = e.text;
         flushLog(st);
+        return;
+    }
+    if (e.kind === 'prompt') {
+        // 交互提示（Y/N 确认、sudo 密码等）：显示应答区等待用户输入
+        const password = /password\s*:/i.test(e.text);
+        showBrewPrompt(st, e.text, password);
         return;
     }
     const kind = e.kind === 'phase' ? 'phase' : e.kind === 'start' ? 'cmd' : null;
