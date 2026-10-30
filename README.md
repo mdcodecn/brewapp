@@ -2,6 +2,8 @@
 
 一款基于 [Wails v2](https://wails.io) 的 macOS 桌面应用，用于可视化管理 [Homebrew](https://brew.sh) 包。使用 Go + 原生 HTML/CSS/JS（Vite 构建）开发，无需 Node 框架，前端零依赖。
 
+![Brew Manager 概览](app.png)
+
 ## 功能特性
 
 - **概览**：Homebrew 系统状态一览，包括版本、磁盘占用、推荐安装、漏洞告警等
